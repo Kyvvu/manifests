@@ -1,0 +1,301 @@
+# EU AI Act - Practical Compliance Template
+#
+# This template contains the essential policies for HIGH risk AI system compliance.
+# It's a subset of the comprehensive template, focusing on the most critical
+# requirements that apply to the majority of HIGH risk AI systems.
+#
+# Based on: Regulation (EU) 2024/1689 (Official Journal, July 12, 2024)
+# Template Version: 1.0
+# Last Updated: January 19, 2026
+#
+# USE THIS TEMPLATE IF:
+# - You're deploying HIGH risk AI systems
+# - You want to start with core compliance requirements
+# - You plan to expand to full compliance over time
+#
+# CRITICAL ARTICLES COVERED:
+# - Article 6: Risk classification
+# - Article 11, 13: Documentation and transparency
+# - Article 14: Human oversight
+# - Article 16: Provider obligations
+# - Article 19: Logging requirements
+
+name: "EU AI Act - Practical HIGH Risk Compliance"
+description: |
+  Essential policy set for HIGH risk AI system compliance per EU AI Act.
+  Contains the most critical requirements that must be met for HIGH risk
+  systems under Articles 8-27.
+  
+  This practical template ensures:
+  - Proper risk classification (Article 6)
+  - Minimum documentation (Articles 11, 13)
+  - Human oversight for critical operations (Article 14)
+  - Provider accountability (Article 16)
+  
+  For comprehensive coverage, use the "EU AI Act - Comprehensive Compliance" template.
+
+version: "1.1"
+
+policies:
+  # ==========================================================================
+  # AGENT REGISTRATION - CORE REQUIREMENTS (ALL AGENTS)
+  # ==========================================================================
+  # Articles 6, 11, 13, 16 - Must be met before deployment
+
+  - name: "Agent must specify risk classification"
+    description: |
+      Article 6: AI systems must be classified by risk level.
+      Required for all agents to determine applicable compliance obligations.
+      
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: field_not_empty
+    params:
+      field: risk_classification
+    severity: critical
+    scope: agent_registration
+    # No risk_classification filter - applies to all agents
+
+  - name: "Risk classification must be valid (HIGH, LIMITED, or MINIMAL)"
+    description: |
+      Article 6: Validates risk classification uses only permitted values.
+      UNACCEPTABLE risk systems should not be deployed.
+      
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: field_in_list
+    params:
+      field: risk_classification
+      values: ["high", "limited", "minimal"]
+    severity: critical
+    scope: agent_registration
+    # No risk_classification filter - applies to all agents
+
+  - name: "Agent must have documented purpose"
+    description: |
+      Article 11, 13: Clear documentation of AI system purpose is required.
+      Enables deployers to interpret outputs and use system appropriately.
+      
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: field_not_empty
+    params:
+      field: purpose
+    severity: high
+    scope: agent_registration
+    # No risk_classification filter - applies to all agents
+
+  - name: "Agent purpose must be meaningful (min 20 characters)"
+    description: |
+      Article 11, 13: Purpose must be substantive, not placeholder text.
+      Ensures meaningful documentation per technical documentation requirements.
+      
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: field_matches_regex
+    params:
+      field: purpose
+      pattern: "^.{20,}$"
+    severity: high
+    scope: agent_registration
+    # No risk_classification filter - applies to all agents
+
+  - name: "Agent must have identifying name"
+    description: |
+      Article 13: AI systems must be clearly identifiable.
+      Deployers must be able to identify and understand system characteristics.
+      
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: field_not_empty
+    params:
+      field: name
+    severity: high
+    scope: agent_registration
+    # No risk_classification filter - applies to all agents
+
+  - name: "Agent must have designated owner (provider)"
+    description: |
+      Article 16: Provider must be identifiable for quality management
+      and taking responsibility for the AI system.
+      
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: field_not_empty
+    params:
+      field: owner_id
+    severity: high
+    scope: agent_registration
+    # No risk_classification filter - applies to all agents
+
+  # ==========================================================================
+  # AGENT REGISTRATION - HIGH RISK SPECIFIC
+  # ==========================================================================
+  # Article 13(3)(b) - Enhanced documentation for HIGH risk
+
+  - name: "HIGH risk agents must have detailed purpose documentation"
+    description: |
+      Article 13(3)(b): Instructions for HIGH risk systems must contain
+      detailed information to enable proper interpretation of outputs.
+      
+      For HIGH risk systems, purpose must be particularly detailed (min 50 chars)
+      to adequately describe intended use, capabilities, and limitations.
+      
+      Applies to: HIGH risk agents only
+    rule_type: field_matches_regex
+    params:
+      field: purpose
+      pattern: "^.{50,}$"
+    severity: high
+    scope: agent_registration
+    risk_classification: high
+
+  # ==========================================================================
+  # STEP EXECUTION - HUMAN OVERSIGHT (HIGH RISK ONLY)
+  # ==========================================================================
+  # Article 14 - Critical for HIGH risk systems
+
+  - name: "HIGH risk - External API calls require human approval"
+    description: |
+      Article 14(4)(d): HIGH risk AI must enable humans to decide not to use
+      the system or override its output. External calls must be approved by
+      humans to ensure meaningful oversight.
+
+      Applies to: HIGH risk agents only
+    rule_type: step_directly_preceded_by
+    params:
+      required_step_type: step.gate
+      target_step_types: ["step.resource"]
+    severity: critical
+    scope: step_execution
+    risk_classification: high
+
+  - name: "HIGH risk - Write operations require human approval"
+    description: |
+      Article 14(4)(c): Oversight measures must include ability to interrupt.
+      Operations with write permissions require human approval to prevent
+      harmful actions.
+
+      Applies to: HIGH risk agents only
+    rule_type: step_directly_preceded_by
+    params:
+      required_step_type: step.gate
+      target_step_types: ["step.resource"]
+      target_verb: POST
+    severity: critical
+    scope: step_execution
+    risk_classification: high
+
+  # ==========================================================================
+  # STEP EXECUTION - DATA GOVERNANCE (ALL AGENTS)
+  # ==========================================================================
+  # Article 10 - Protect data quality and privacy
+
+  - name: "PII verification required before LLM calls"
+    description: |
+      Article 10(3), 10(5): Data must be relevant, representative, and free
+      of errors. Special categories of personal data require safeguards.
+
+      Verify or remove PII before sending to LLM providers.
+
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: step_requires_predecessor
+    params:
+      required_step_type: step.gate
+      target_step_types: ["step.model"]
+    severity: high
+    scope: step_execution
+    # No risk_classification filter - applies to all agents
+
+  # ==========================================================================
+  # STEP EXECUTION - ROBUSTNESS & MONITORING
+  # ==========================================================================
+  # Articles 15, 72 - Prevent runaway behavior and enable monitoring
+
+  - name: "Limit tool calls to prevent runaway agents"
+    description: |
+      Article 15(3): Systems must be resilient against errors and inconsistencies.
+      Limits resource steps per task to prevent infinite loops and ensure robustness.
+
+      Maximum 50 step.resource calls per task.
+
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: execution_max_steps
+    params:
+      max_steps: 50
+      step_type: step.resource
+    severity: high
+    scope: step_execution
+    # No risk_classification filter - applies to all agents
+
+# ============================================================================
+# TEMPLATE METADATA
+# ============================================================================
+
+metadata:
+  template_type: "practical_essential"
+  parent_template: "EU AI Act - Comprehensive Compliance"
+
+  # This template covers essential requirements from:
+  articles_covered:
+    - "Article 6: Classification rules"
+    - "Article 10: Data governance"
+    - "Article 11: Technical documentation"
+    - "Article 13: Transparency"
+    - "Article 14: Human oversight"
+    - "Article 15: Robustness"
+    - "Article 16: Provider obligations"
+    - "Article 72: Post-market monitoring"
+
+  # Policy count
+  policy_count:
+    agent_registration: 7  # 6 general + 1 HIGH-specific
+    step_execution: 4  # 2 HIGH-specific human oversight + 1 general PII + 1 general execution limit
+    total: 11
+
+  # Target audience
+  target_risk_level: "high"
+
+  # Risk classification breakdown
+  risk_classification_coverage:
+    ALL: 8  # Basic requirements that apply regardless of risk
+    HIGH: 4  # HIGH risk-specific requirements
+
+  # What this template provides
+  coverage:
+    - "✅ Core registration and documentation requirements (ALL agents)"
+    - "✅ Enhanced documentation for HIGH risk systems"
+    - "✅ Essential human oversight for HIGH risk systems"
+    - "✅ Basic data governance (PII protection, ALL agents)"
+    - "✅ Robustness controls (execution limits, ALL agents)"
+    - "⚠️  Does NOT include: transparency for LIMITED risk (Article 50)"
+    - "⚠️  Does NOT include: voluntary MINIMAL risk best practices"
+    - "⚠️  Does NOT include: advanced data quality checks"
+
+  # Next steps
+  expansion_path:
+    - "Start with this practical template for immediate compliance"
+    - "Test and validate policies in dev environment"
+    - "Add Article 50 transparency policies for LIMITED risk systems"
+    - "Implement full comprehensive template for complete coverage"
+    - "Customize policies based on specific Annex III use cases"
+
+  # Implementation notes
+  implementation_notes:
+    - "Policies with risk_classification: HIGH only apply to HIGH risk agents"
+    - "Policies without risk_classification apply to ALL agents"
+    - "Human oversight policies require step.gate steps in your agent workflows"
+    - "PII governance policies require a step.gate step before step.model calls"
+    - "The comprehensive template adds 11 additional policies for full coverage"
+
+  # Compliance checklist
+  checklist:
+    agent_registration:
+      - "✓ Risk classification specified and validated (ALL)"
+      - "✓ Purpose documented with meaningful description (ALL)"
+      - "✓ Detailed purpose for HIGH risk (50+ chars, HIGH only)"
+      - "✓ Agent named for identification (ALL)"
+      - "✓ Owner/provider designated (ALL)"
+    runtime_enforcement:
+      - "✓ Human approval gate before external calls (HIGH only)"
+      - "✓ Human approval gate before write operations (HIGH only)"
+      - "✓ PII gate verification before model calls (ALL)"
+      - "✓ Execution limits prevent runaway behavior (ALL)"
+    post_deployment:
+      - "✓ Continuous logging enabled (via Kyvvu platform)"
+      - "✓ Incident tracking active (via Kyvvu platform)"
+      - "✓ Audit reports available (via Kyvvu platform)"

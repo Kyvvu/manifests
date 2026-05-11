@@ -1,0 +1,75 @@
+# Data Minimization - Best Practices Template
+#
+# This template implements data minimization principles aligned with GDPR
+# and AI governance best practices. Ensures agents only collect and process
+# data necessary for their stated purpose.
+
+name: "Data Minimization - Best Practices"
+description: |
+  Implements data minimization and privacy-by-design principles for AI agents.
+  
+  Based on GDPR Article 5(1)(c) data minimization requirement: personal data 
+  shall be adequate, relevant and limited to what is necessary in relation to 
+  the purposes for which they are processed.
+  
+  This template ensures agents have proper documentation and constraints
+  around data handling.
+  
+  These policies apply to ALL agents regardless of risk classification as
+  data minimization is a fundamental privacy principle.
+
+version: "1.0"
+
+policies:
+  - name: "Agent must document data purpose"
+    description: |
+      Under data minimization principles, agents must clearly document what
+      data they collect and why. The purpose field should describe this.
+      
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: field_not_empty
+    params:
+      field: purpose
+    severity: high
+    scope: agent_registration
+    # No risk_classification filter - applies to all agents
+
+  - name: "Agent must have data owner"
+    description: |
+      Every agent handling data must have a designated owner responsible
+      for data protection compliance.
+      
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: field_not_empty
+    params:
+      field: owner_id
+    severity: high
+    scope: agent_registration
+    # No risk_classification filter - applies to all agents
+
+  - name: "Agent must have maintainer"
+    description: |
+      Agents must have a designated maintainer who can respond to data
+      subject requests and handle data incidents.
+      
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: field_not_empty
+    params:
+      field: maintainer_id
+    severity: medium
+    scope: agent_registration
+    # No risk_classification filter - applies to all agents
+
+  - name: "Agent purpose must be specific"
+    description: |
+      Purpose must be specific and detailed (minimum 30 characters) to
+      enable proper data minimization assessment.
+      
+      Applies to: ALL agents (HIGH, LIMITED, MINIMAL)
+    rule_type: field_matches_regex
+    params:
+      field: purpose
+      pattern: "^.{30,}$"
+    severity: medium
+    scope: agent_registration
+    # No risk_classification filter - applies to all agents
