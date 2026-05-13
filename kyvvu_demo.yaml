@@ -1,0 +1,41 @@
+ name: "Kyvvu Demo - Getting Started"
+  description: |
+    Starter manifest for new Kyvvu installations. Contains three
+    basic governance policies: one registration requirement and two
+    runtime guard-rails (disabled by default).
+
+  version: "1.0"
+
+  policies:
+    - name: "Agent Purpose Required"
+      description: |
+        All agents must have a documented purpose as required by
+        EU AI Act Article 13.
+      rule_type: field_not_empty
+      params:
+        field: purpose
+      severity: high
+      scope: agent_registration
+
+    - name: "Max LLM calls per task"
+      description: |
+        Guard-rail: limits the total number of step.model (LLM inference)
+        calls within a single task execution. Tune max_steps to match
+        your agent's expected workload.
+      rule_type: execution_max_steps
+      params:
+        step_type: step.model
+        max_steps: 100
+      severity: high
+      scope: step_execution
+
+    - name: "Max consecutive LLM calls"
+      description: |
+        Guard-rail: prevents tight LLM loops by capping consecutive
+        step.model calls with no other step type in between.
+      rule_type: max_consecutive_same_type
+      params:
+        step_type: step.model
+        max_consecutive: 10
+      severity: medium
+      scope: step_execution
