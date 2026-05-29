@@ -1,0 +1,127 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Internal AI Starter
+#
+# Generic responsible-AI policy set for organizations with no specific
+# regulatory driver. Covers tool allowlisting, execution limits, cost
+# controls, destructive operation gates, and loop prevention.
+
+name: "Internal AI Starter"
+description: |
+  General-purpose responsible-AI policy set for organizations deploying
+  AI agents without a specific regulatory requirement. Provides sensible
+  defaults for tool allowlisting (fail-closed), execution and cost
+  limits, destructive operation gates, and infinite loop prevention.
+
+  Suitable as a starting point for internal deployments. Layer with
+  compliance manifests (EU AI Act, GDPR, etc.) as regulatory
+  requirements emerge.
+
+version: "1.0.0"
+
+policies:
+  # ==========================================================================
+  # AGENT REGISTRATION
+  # ==========================================================================
+
+  - name: "Agent must have a name"
+    description: |
+      Basic identification: every agent must have a non-empty name for
+      audit trail readability and operational visibility.
+    rule_type: field_not_empty
+    params:
+      field: name
+    severity: high
+    scope: agent_registration
+
+  - name: "Agent must document its purpose"
+    description: |
+      Every agent must declare what it does. This is the minimum
+      documentation requirement for responsible AI deployment.
+    rule_type: field_not_empty
+    params:
+      field: purpose
+    severity: high
+    scope: agent_registration
+
+  - name: "Agent must designate an owner"
+    description: |
+      Every agent must have an accountable owner. When something goes
+      wrong, there must be a human to contact.
+    rule_type: field_not_empty
+    params:
+      field: owner_id
+    severity: high
+    scope: agent_registration
+
+  # ==========================================================================
+  # STEP EXECUTION
+  # ==========================================================================
+
+  - name: "Tool calls must be in the declared allowlist"
+    description: |
+      Fail-closed tool allowlisting: agents without a declared_tools
+      allowlist are blocked from all tool calls on the listed step types.
+      Agents with a declared_tools list can only invoke tools whose
+      step_name appears in that list.
+
+      This is the single most effective policy for preventing tool misuse
+      and supply-chain attacks.
+    rule_type: step_name_in_allowlist
+    params:
+      agent_field: declared_tools
+      target_step_types: ["step.resource", "step.exec", "step.credential"]
+    severity: critical
+    scope: step_execution
+
+  - name: "Limit LLM calls per task"
+    description: |
+      Loop control: cap model inference calls at 50 per task to prevent
+      runaway analysis loops, excessive cost, and cascading failures.
+    rule_type: execution_max_steps
+    params:
+      step_type: step.model
+      max_steps: 50
+    severity: critical
+    scope: step_execution
+
+  - name: "Token budget per task"
+    description: |
+      Cost control: cap cumulative token usage at 100,000 tokens per
+      task. Requires the agent to emit usage.total_tokens in step.model
+      properties.
+
+      Adjust the budget based on your model pricing and acceptable
+      per-task cost.
+    rule_type: usage_budget
+    params:
+      step_type: step.model
+      property_path: usage.total_tokens
+      budget: 100000
+    severity: critical
+    scope: step_execution
+
+  - name: "Destructive operations require human approval"
+    description: |
+      DELETE operations on resources and code execution require a
+      human_approval gate. This prevents accidental or malicious
+      destructive actions.
+    rule_type: step_requires_gate
+    params:
+      target_step_types: ["step.resource", "step.exec"]
+      target_verb: DELETE
+      gate_check_type: human_approval
+    severity: critical
+    scope: step_execution
+
+  - name: "Prevent infinite LLM loops"
+    description: |
+      Block tasks where the agent calls the model more than 5 times
+      consecutively without any other step type intervening. This
+      catches agents stuck in a reasoning loop.
+    rule_type: max_consecutive_same_type
+    params:
+      step_type: step.model
+      max_consecutive: 5
+    severity: critical
+    scope: step_execution

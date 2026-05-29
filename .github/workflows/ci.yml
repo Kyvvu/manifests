@@ -1,0 +1,22 @@
+name: Manifest CI
+
+on:
+  push:
+    paths: ["manifests/**", "tests/**", "examples/**"]
+  pull_request:
+    paths: ["manifests/**", "tests/**", "examples/**"]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: yamllint
+        run: yamllint manifests/
+      - name: pytest
+        run: pytest tests/ -v

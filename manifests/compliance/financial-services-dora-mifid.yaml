@@ -1,0 +1,162 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Financial Services — DORA / MiFID II
+#
+# Audit trail, human oversight, and risk controls for AI agents operating
+# in financial services. Covers trade execution gates, market data taint
+# tracking, approval integrity, and working-hours restrictions.
+#
+# Based on: DORA Regulation (EU) 2022/2554 (Digital Operational Resilience),
+#           MiFID II Directive 2014/65/EU (Markets in Financial Instruments)
+
+name: "Financial Services — DORA / MiFID II"
+description: |
+  Policy set for AI agents in financial services, implementing controls
+  from the Digital Operational Resilience Act (DORA) and the Markets in
+  Financial Instruments Directive (MiFID II).
+
+  Covers human approval for financial writes, market data taint tracking
+  (path-dependent enforcement), approval integrity without LLM
+  interference, LLM call limits, and working-hours restrictions.
+
+version: "1.0.0"
+
+policies:
+  # ==========================================================================
+  # AGENT REGISTRATION
+  # ==========================================================================
+
+  - name: "Agent must document its financial services purpose"
+    description: |
+      DORA Article 5 — ICT risk management framework: financial entities
+      must document their ICT systems and their purposes. Agents operating
+      in financial contexts must declare their intended use.
+    rule_type: field_not_empty
+    params:
+      field: purpose
+    severity: high
+    scope: agent_registration
+
+  - name: "Agent must designate a responsible owner"
+    description: |
+      DORA Article 5(2) — The management body shall define, approve, and
+      oversee the ICT risk management framework. The owner_id identifies
+      the accountable party.
+    rule_type: field_not_empty
+    params:
+      field: owner_id
+    severity: high
+    scope: agent_registration
+
+  - name: "Agent must designate a maintainer"
+    description: |
+      DORA Article 6 — ICT systems must have clear assignment of
+      responsibilities for maintenance and incident response. The
+      maintainer_id identifies the operational contact.
+    rule_type: field_not_empty
+    params:
+      field: maintainer_id
+    severity: medium
+    scope: agent_registration
+
+  - name: "Financial agents must be high or limited risk"
+    description: |
+      MiFID II Article 16 — Organisational requirements: investment firms
+      must have sound administrative and accounting procedures, internal
+      control mechanisms, and effective risk assessment. Agents must be
+      classified as high or limited risk.
+    rule_type: field_in_list
+    params:
+      field: risk_classification
+      values: ["high", "limited"]
+    severity: critical
+    scope: agent_registration
+
+  # ==========================================================================
+  # STEP EXECUTION
+  # ==========================================================================
+
+  - name: "Financial write operations require human approval"
+    description: |
+      MiFID II Article 27 — Best execution: firms must take sufficient
+      steps to obtain the best possible result for their clients. Write
+      operations (POST) on financial resources must be preceded by a
+      human_approval gate to ensure suitability and best execution
+      obligations are met.
+    rule_type: step_requires_gate
+    params:
+      target_step_types: ["step.resource"]
+      target_verb: POST
+      gate_check_type: human_approval
+    severity: critical
+    scope: step_execution
+
+  - name: "Market data read taints downstream trade execution"
+    description: |
+      DORA Article 9 — ICT risk management: once market data is read
+      from an external source, automated trade execution (step.resource
+      POST) is permanently blocked for the remainder of the task. This
+      prevents algorithmic decisions based on potentially manipulated or
+      stale market data from being executed without human review.
+
+      This is a path-dependent policy: the same POST operation is allowed
+      when no market data has been read, but blocked after a market data
+      read enters the task history. A stateless per-call check cannot
+      enforce this.
+
+      IMPORTANT: Replace market-data.example.com with your actual market
+      data provider domain.
+    rule_type: tainted_path_block
+    params:
+      taint_step_type: step.resource
+      taint_verb: GET
+      taint_property_filter:
+        target.host: market-data.example.com
+      target_step_types: ["step.resource"]
+      target_verb: POST
+    severity: critical
+    scope: step_execution
+
+  - name: "No LLM call between approval and trade execution"
+    description: |
+      MiFID II Article 27 — Approval integrity: once a human approves a
+      trade, no LLM inference (step.model) may occur between the approval
+      gate and the actual trade execution (step.resource POST). This
+      prevents the model from reinterpreting or modifying the approved
+      action.
+    rule_type: step_preceded_by_without_intervening
+    params:
+      required_step_type: step.gate
+      forbidden_intervening: ["step.model"]
+      target_step_types: ["step.resource"]
+      target_verb: POST
+    severity: critical
+    scope: step_execution
+
+  - name: "Limit LLM calls per task"
+    description: |
+      DORA Article 9 — Risk controls: limit the number of model inference
+      calls per task to prevent runaway analysis loops and excessive
+      resource consumption.
+    rule_type: execution_max_steps
+    params:
+      step_type: step.model
+      max_steps: 20
+    severity: high
+    scope: step_execution
+
+  - name: "Restrict execution to market hours"
+    description: |
+      MiFID II Article 48 — Trading venue requirements: algorithmic
+      trading must operate within defined parameters. This policy
+      restricts agent execution to European market hours (08:00-18:00
+      CET).
+
+      Adjust start_hour, end_hour, and timezone for your market.
+    rule_type: working_hours_only
+    params:
+      start_hour: 8
+      end_hour: 18
+      timezone: "Europe/Amsterdam"
+    severity: critical
+    scope: step_execution

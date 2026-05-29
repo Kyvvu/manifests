@@ -1,0 +1,130 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# EU AI Act - Minimal / Limited Risk Compliance
+#
+# Covers transparency obligations (Article 50) and basic registration
+# requirements applicable to MINIMAL and LIMITED risk AI systems.
+#
+# Based on: Regulation (EU) 2024/1689 (Official Journal, July 12, 2024)
+#
+# For HIGH risk systems, use eu-ai-act-high-risk.yaml instead (or in
+# addition to this manifest).
+
+name: "EU AI Act - Minimal / Limited Risk Compliance"
+description: |
+  Policy set for EU AI Act compliance targeting MINIMAL and LIMITED risk
+  AI systems. Implements Article 50 transparency obligations (chatbot
+  disclosure, synthetic content marking) and basic registration-time
+  documentation requirements from Articles 6, 11, 13, and 16.
+
+  This manifest is intentionally lean: it enforces what the regulation
+  requires for lower-risk tiers without imposing high-risk overhead.
+
+version: "1.0.0"
+
+policies:
+  # ==========================================================================
+  # AGENT REGISTRATION - DOCUMENTATION BASELINE
+  # ==========================================================================
+
+  - name: "Agent must have a documented purpose"
+    description: |
+      EU AI Act Article 13 requires clear documentation of AI system purpose
+      to enable deployers to interpret outputs and use the system
+      appropriately. The purpose field must not be empty.
+
+      Applies to: ALL risk classifications.
+    rule_type: field_not_empty
+    params:
+      field: purpose
+    severity: high
+    scope: agent_registration
+
+  - name: "Agent must have an identifying name"
+    description: |
+      EU AI Act Article 13 requires that AI systems be clearly identifiable.
+      Deployers must be able to identify the system and understand its
+      characteristics.
+
+      Applies to: ALL risk classifications.
+    rule_type: field_not_empty
+    params:
+      field: name
+    severity: high
+    scope: agent_registration
+
+  - name: "Risk classification must be valid"
+    description: |
+      EU AI Act Article 6 requires AI systems to be classified by risk level.
+      Valid values are high, limited, and minimal. Systems classified as
+      unacceptable risk must not be deployed (Article 5).
+
+      Applies to: ALL risk classifications.
+    rule_type: field_in_list
+    params:
+      field: risk_classification
+      values: ["high", "limited", "minimal"]
+    severity: critical
+    scope: agent_registration
+
+  - name: "Agent must have a designated owner"
+    description: |
+      EU AI Act Article 16 establishes provider obligations including
+      maintaining a quality management system and taking responsibility for
+      the AI system. Each agent must identify its responsible provider.
+
+      Applies to: ALL risk classifications.
+    rule_type: field_not_empty
+    params:
+      field: owner_id
+    severity: medium
+    scope: agent_registration
+
+  - name: "Agent purpose must be substantive"
+    description: |
+      EU AI Act Article 11 requires detailed technical documentation.
+      A minimum length of 20 characters prevents placeholder text such as
+      "test" or "demo" from passing validation.
+
+      Applies to: ALL risk classifications.
+    rule_type: field_matches_regex
+    params:
+      field: purpose
+      pattern: "^.{20,}$"
+    severity: medium
+    scope: agent_registration
+
+  # ==========================================================================
+  # STEP EXECUTION - ARTICLE 50 TRANSPARENCY OBLIGATIONS
+  # ==========================================================================
+
+  - name: "AI-generated content must be marked before delivery"
+    description: |
+      EU AI Act Article 50(3) requires that deployers of AI systems
+      generating synthetic audio, image, video, or text ensure outputs are
+      marked in a machine-readable format and detectable as artificially
+      generated. A step.gate immediately before step.model enforces the
+      marking checkpoint.
+
+      Applies to: ALL risk classifications.
+    rule_type: step_directly_preceded_by
+    params:
+      required_step_type: step.gate
+      target_step_types: ["step.model"]
+    severity: high
+    scope: step_execution
+
+  - name: "Chatbot disclosure gate required before outbound messages"
+    description: |
+      EU AI Act Article 50(1) requires that natural persons be informed
+      they are interacting with an AI system, unless this is obvious from
+      the circumstances. A step.gate before outbound messages (step.message
+      POST) enforces the disclosure checkpoint.
+
+      Applies to: ALL risk classifications.
+    rule_type: step_requires_gate
+    params:
+      target_step_types: ["step.message"]
+      target_verb: POST
+    severity: high
+    scope: step_execution

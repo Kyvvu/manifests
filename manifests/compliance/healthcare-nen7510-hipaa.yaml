@@ -1,0 +1,129 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Healthcare — NEN 7510 / HIPAA
+#
+# Policies for AI agents handling Protected Health Information (PHI).
+# Covers PII/PHI detection, data residency restrictions, patient consent
+# gates, and code execution prohibitions for high-risk healthcare agents.
+#
+# Based on: NEN 7510 (Dutch healthcare information security),
+#           HIPAA Privacy Rule (45 CFR Part 164)
+#
+# NOTE: Domain allowlist values and PII regex patterns are examples.
+# Customize per deployment before production use.
+
+name: "Healthcare — NEN 7510 / HIPAA"
+description: |
+  Policy set for AI agents that handle Protected Health Information (PHI)
+  in healthcare contexts. Implements controls from NEN 7510 (Dutch
+  healthcare information security standard) and the HIPAA Privacy Rule.
+
+  Covers PHI pattern detection in outbound payloads, data residency
+  restrictions via domain allowlisting, patient consent gates, and
+  prohibition of arbitrary code execution for high-risk healthcare agents.
+
+  IMPORTANT: The PII regex patterns and allowed domains in this manifest
+  are examples. Customize them for your deployment before production use.
+
+version: "1.0.0"
+
+policies:
+  # ==========================================================================
+  # AGENT REGISTRATION
+  # ==========================================================================
+
+  - name: "Agent must document its healthcare purpose"
+    description: |
+      NEN 7510 clause 5.1 — Information security policy: the purpose
+      and scope of information processing must be documented. Agents
+      handling PHI must declare their intended use.
+    rule_type: field_not_empty
+    params:
+      field: purpose
+    severity: high
+    scope: agent_registration
+
+  - name: "Agent must designate a responsible owner"
+    description: |
+      HIPAA 45 CFR 164.530(a)(1) — Covered entities must designate a
+      privacy official responsible for policies and procedures. The
+      owner_id field identifies the responsible party.
+    rule_type: field_not_empty
+    params:
+      field: owner_id
+    severity: high
+    scope: agent_registration
+
+  - name: "Healthcare agents must be classified as high risk"
+    description: |
+      NEN 7510 clause 5.2 — Risk assessment: AI agents processing PHI
+      are inherently high-risk. This policy restricts the manifest to
+      agents classified as high risk only.
+    rule_type: field_in_list
+    params:
+      field: risk_classification
+      values: ["high"]
+    severity: critical
+    scope: agent_registration
+
+  # ==========================================================================
+  # STEP EXECUTION
+  # ==========================================================================
+
+  - name: "Scan outbound payloads for PHI patterns"
+    description: |
+      HIPAA 45 CFR 164.502(a) — PHI must not be disclosed except as
+      permitted. This policy scans outbound request payloads for common
+      PHI identifiers: US Social Security Numbers, Dutch BSN (Citizen
+      Service Numbers), and email addresses.
+
+      IMPORTANT: These regex patterns are examples. Customize them for
+      your jurisdiction and data types before production use.
+    rule_type: pii_in_request
+    params:
+      patterns:
+        - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+        - "\\b\\d{9}\\b"
+        - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
+    severity: critical
+    scope: step_execution
+
+  - name: "Restrict data access to approved healthcare domains"
+    description: |
+      NEN 7510 clause 13.1 — Network security management: restrict
+      external communications to approved endpoints. This policy
+      allowlists domains that are approved for PHI data exchange.
+
+      IMPORTANT: Replace these example domains with your actual EHR
+      and FHIR endpoints before production use.
+    rule_type: domain_allowlist
+    params:
+      allowed_domains: ["ehr.example.com", "fhir.example.com"]
+    severity: critical
+    scope: step_execution
+
+  - name: "PHI access requires patient consent gate"
+    description: |
+      HIPAA 45 CFR 164.508 — Uses and disclosures for which an
+      authorization is required. Resource access involving patient data
+      must be preceded by a patient_consent gate confirming a valid
+      authorization is on file.
+    rule_type: step_requires_gate
+    params:
+      target_step_types: ["step.resource"]
+      gate_check_type: patient_consent
+    severity: critical
+    scope: step_execution
+
+  - name: "Code execution is forbidden for healthcare agents"
+    description: |
+      NEN 7510 clause 12.2 — Protection from malware: arbitrary code
+      execution by healthcare AI agents introduces unacceptable risk of
+      data breach or system compromise. This policy blocks step.exec
+      for all high-risk healthcare agents.
+    rule_type: step_forbidden_for_classification
+    params:
+      forbidden_step_type: step.exec
+      agent_risk_classifications: ["high"]
+    severity: critical
+    scope: step_execution

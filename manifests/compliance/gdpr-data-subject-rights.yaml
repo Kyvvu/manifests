@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# GDPR Data Subject Rights
+#
+# Policies enforcing key GDPR principles for AI agents that process
+# personal data: purpose limitation, data minimization, right to erasure,
+# and safeguards for automated decision-making.
+#
+# Based on: Regulation (EU) 2016/679 (General Data Protection Regulation)
+
+name: "GDPR Data Subject Rights"
+description: |
+  Policy set implementing key GDPR requirements for AI agents that
+  process personal data. Covers purpose limitation (Article 5(1)(b)),
+  data minimization (Article 5(1)(c)), right to erasure (Article 17),
+  data subject contact point (Article 13(1)(a)), and safeguards for
+  automated decision-making (Article 22).
+
+version: "1.0.0"
+
+policies:
+  # ==========================================================================
+  # AGENT REGISTRATION
+  # ==========================================================================
+
+  - name: "Agent must document processing purpose"
+    description: |
+      GDPR Article 5(1)(b) — Purpose limitation: personal data must be
+      collected for specified, explicit, and legitimate purposes. Agents
+      that process personal data must declare their purpose at registration.
+    rule_type: field_not_empty
+    params:
+      field: purpose
+    severity: high
+    scope: agent_registration
+
+  - name: "Agent must designate a DSR response contact"
+    description: |
+      GDPR Article 13(1)(a) — The identity and contact details of the
+      controller must be communicated to the data subject. The maintainer_id
+      field serves as the contact point for data subject requests.
+    rule_type: field_not_empty
+    params:
+      field: maintainer_id
+    severity: high
+    scope: agent_registration
+
+  - name: "Agent processing purpose must be substantive"
+    description: |
+      GDPR Article 5(1)(c) — Data minimization: personal data must be
+      adequate, relevant, and limited to what is necessary. A substantive
+      purpose description (minimum 30 characters) ensures the processing
+      basis is documented, not a placeholder.
+    rule_type: field_matches_regex
+    params:
+      field: purpose
+      pattern: "^.{30,}$"
+    severity: medium
+    scope: agent_registration
+
+  # ==========================================================================
+  # STEP EXECUTION
+  # ==========================================================================
+
+  - name: "Erasure operations require an approval gate"
+    description: |
+      GDPR Article 17 — Right to erasure: the controller must be able to
+      erase personal data without undue delay. DELETE operations on
+      resources must be preceded by an erasure_approval gate to ensure
+      the request is legitimate and properly scoped.
+    rule_type: step_requires_gate
+    params:
+      target_step_types: ["step.resource"]
+      target_verb: DELETE
+      gate_check_type: erasure_approval
+    severity: critical
+    scope: step_execution
+
+  - name: "Automated decisions on personal data require consent gate"
+    description: |
+      GDPR Article 22 — The data subject has the right not to be subject
+      to a decision based solely on automated processing which produces
+      legal effects or similarly significant effects. Model calls that
+      process personal data must be preceded by a data_subject_consent
+      gate confirming the data subject's explicit consent or another
+      lawful basis.
+    rule_type: step_requires_gate
+    params:
+      target_step_types: ["step.model"]
+      gate_check_type: data_subject_consent
+    severity: critical
+    scope: step_execution
+
+  - name: "Limit resource access scope per task"
+    description: |
+      GDPR Article 5(1)(c) — Data minimization: restrict the volume of
+      resource accesses per task to prevent excessive data collection
+      beyond what is necessary for the stated purpose.
+    rule_type: execution_max_steps
+    params:
+      step_type: step.resource
+      max_steps: 30
+    severity: high
+    scope: step_execution

@@ -1,71 +1,100 @@
 # Kyvvu Manifests
 
-Compliance policy manifests for the [Kyvvu](https://kyvvu.com) AI governance platform.
+A manifest is a YAML bundle of compliance policies that governs how AI agents behave at runtime. Bind a manifest to an agent via the Kyvvu CLI or dashboard to enforce it.
 
-## What are manifests?
+## Manifests
 
-Manifests are YAML files containing compliance policies that can be assigned to AI agents via the Kyvvu platform. Each manifest defines a set of rules — evaluated at agent registration and at runtime before each step executes.
+| Manifest | Directory | Scope | Basis |
+|----------|-----------|-------|-------|
+| `eu-ai-act-minimal` | `compliance/` | Registration + Step | EU AI Act Art. 6, 13, 50 |
+| `eu-ai-act-high-risk` | `compliance/` | Registration + Step | EU AI Act Art. 6-15 |
+| `gdpr-data-subject-rights` | `compliance/` | Registration + Step | GDPR Art. 5, 13, 17, 22 |
+| `healthcare-nen7510-hipaa` | `compliance/` | Registration + Step | NEN 7510, HIPAA |
+| `financial-services-dora-mifid` | `compliance/` | Registration + Step | DORA, MiFID II |
+| `owasp-agentic-default` | `security/` | Registration + Step | OWASP Agentic Top 10 (2026) |
+| `data-exfiltration-guard` | `security/` | Step | Data loss prevention |
+| `internal-ai-starter` | `operational/` | Registration + Step | General responsible AI |
+| `demo` | `operational/` | Registration + Step | Getting started |
 
-## Available manifests
-
-| Manifest | Policies | Description |
-|----------|----------|-------------|
-| `owasp_agentic_default.yaml` | 8 | OWASP Top 10 for Agentic Applications (2026) — baseline security for any agent |
-| `ai_act_comprehensive.yaml` | 21 | EU AI Act full coverage (Articles 6-95) — for high-risk deployments |
-| `ai_act_practical.yaml` | 11 | EU AI Act practical subset — focused on HIGH risk obligations |
-| `eu_ai_act_basic.yaml` | 6 | EU AI Act minimum — Article 13 transparency requirements |
-| `data_minimization.yaml` | 4 | GDPR data minimization best practices |
-| `kyvvu_demo.yaml` | 2 | Getting started — minimal manifest for onboarding |
-
-## Usage
-
-### Dashboard
-
-1. Go to **Manifests** in the Kyvvu dashboard
-2. Connect this repository (paste the URL + a GitHub token with read access)
-3. Browse manifests, preview policies, assign to agents
-
-### CLI
+## Quickstart
 
 ```bash
-kyvvu list-manifests
-kyvvu assign-manifest --agent-id <id> --repo-id <id> --manifest owasp_agentic_default.yaml
+pip install kyvvu-engine pyyaml
+
+# Run the exfiltration guard demo (no API key needed)
+cd examples
+python exfiltration_demo.py
 ```
 
-### Manifest structure
+To assign a manifest to a live agent, use the Kyvvu dashboard or API:
+
+1. Connect a manifest repository under **Settings > Repos**.
+2. Navigate to **Agents > Manifests** and assign a manifest file to the agent.
+3. The engine evaluates every agent step against the manifest's policies.
+
+## Manifest anatomy
+
+Every manifest is a YAML file with this structure:
 
 ```yaml
-name: "Manifest Name"
+# SPDX-License-Identifier: Apache-2.0
+name: "My Manifest"
 description: |
-  What this manifest covers and why.
-version: "1.0"
+  What this manifest enforces and why.
+version: "1.0.0"
 
 policies:
-  - name: "Policy name"
-    description: "What this policy enforces"
-    rule_type: field_not_empty       # rule from kyvvu-engine
+  # Registration-time check
+  - name: "Agent must have a purpose"
+    description: |
+      EU AI Act Article 13 requires documentation of AI system purpose.
+    rule_type: field_not_empty
     params:
       field: purpose
-    severity: high                   # low | medium | high | critical
-    scope: agent_registration        # agent_registration | step_execution
-    risk_classification: high        # optional: minimal | limited | high
+    severity: high
+    scope: agent_registration
+
+  # Runtime step check
+  - name: "DELETE requires human approval"
+    description: |
+      Destructive operations must be preceded by a human approval gate.
+    rule_type: step_requires_gate
+    params:
+      target_step_types: ["step.resource"]
+      target_verb: DELETE
+      gate_check_type: human_approval
+    severity: critical
+    scope: step_execution
 ```
 
-## Writing custom manifests
+**Scopes**: `agent_registration` policies evaluate when an agent registers. `step_execution` policies evaluate before every agent action at runtime.
 
-Fork this repo and add your own YAML files. The Kyvvu platform validates manifests on import — invalid files are flagged with clear error messages.
+**Severity levels**: `critical` triggers a **block** (the action is prevented). `high`, `medium`, and `low` trigger a **warn** (the violation is logged but the action proceeds).
 
-Available rule types are documented at [docs.kyvvu.com](https://docs.kyvvu.com) and can be listed via the API: `GET /api/v1/policies/rules`.
+## Path-dependent enforcement
+
+Most agent governance tools evaluate each API call in isolation. Kyvvu policies are functions of the full execution history — a step that was safe in one context becomes a violation after a sensitive read, a tainted credential access, or a missing approval gate.
+
+**Example**: the `data-exfiltration-guard` manifest uses `tainted_path_block` to permanently block outbound messages after a sensitive data read. The same `step.message POST` is allowed in a clean task but blocked once PII-classified data enters the task history. See [`examples/exfiltration_demo.py`](examples/exfiltration_demo.py) for a runnable demonstration.
+
+Path-dependent rules available in the engine:
+
+| Rule | What it does |
+|------|-------------|
+| `tainted_path_block` | Permanently blocks target steps after a taint step appears in history |
+| `step_requires_gate` | Requires a gate step (with optional check_type) anywhere in history |
+| `step_preceded_by_without_intervening` | Requires a predecessor with no forbidden step types between |
+| `step_requires_dedicated_predecessor` | Each target consumes its own predecessor (one gate, one action) |
+| `history_contains` | Checks whether a specific step type exists in history |
+| `sequence_forbidden` | Blocks a forbidden ordered sequence of step types |
+| `usage_budget` | Tracks cumulative property values across the task |
+| `execution_max_steps` | Caps the count of a step type within a task |
+| `max_consecutive_same_type` | Limits consecutive occurrences of a step type |
+
+## Authoring and contributing
+
+See [docs/authoring-guide.md](docs/authoring-guide.md) for how to write a manifest and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
 ## License
 
-Copyright 2026 Kyvvu B.V. All rights reserved.
-
-These manifests are provided for use with the Kyvvu platform. Redistribution or use outside the Kyvvu platform requires written permission.
-
-## Contact
-
-- Platform: [platform.kyvvu.com](https://platform.kyvvu.com)
-- Documentation: [docs.kyvvu.com](https://docs.kyvvu.com)
-- Email: hello@kyvvu.com
-- Website: [kyvvu.com](https://kyvvu.com)
+Manifests are licensed under Apache 2.0 — see [LICENSE](LICENSE). The Kyvvu engine that evaluates them is licensed under BSL 1.1.

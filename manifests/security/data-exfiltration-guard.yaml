@@ -1,0 +1,130 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Data Exfiltration Guard
+#
+# Flagship path-dependent manifest. Prevents data exfiltration by tracking
+# sensitive data reads through the task history and blocking subsequent
+# external sends. Demonstrates why stateless per-call governance is
+# insufficient for agent security.
+
+name: "Data Exfiltration Guard"
+description: |
+  Path-dependent security manifest that prevents data exfiltration from
+  AI agents. Once an agent reads from a sensitive data source (classified
+  as PII), any subsequent external communication is permanently blocked
+  for the remainder of the task.
+
+  This is the clearest demonstration of why execution-history-aware
+  governance matters: the same outbound step.message POST is allowed in
+  a clean task but blocked after a sensitive read. A stateless per-call
+  policy cannot enforce this.
+
+  Defense-in-depth layers:
+  1. Tainted path block (history-aware, permanent)
+  2. Gate before external sends (structural)
+  3. Domain allowlist (network boundary)
+  4. PII pattern scanning (content inspection)
+  5. Credential-to-message sequence prohibition (path-aware)
+
+version: "1.0.0"
+
+policies:
+  # ==========================================================================
+  # LAYER 1: PATH-DEPENDENT TAINT (the differentiator)
+  # ==========================================================================
+
+  - name: "Block external send after sensitive data read"
+    description: |
+      Once a sensitive data source is read (step.resource GET with
+      data.classification set to pii), any external outbound communication
+      (step.message POST or step.resource POST) is permanently blocked
+      for the remainder of the task.
+
+      This prevents data exfiltration via prompt injection or compromised
+      tool calls. The taint is permanent — no subsequent gate or action
+      can clear it within the same task. A new task must be started.
+
+      A stateless per-call policy cannot enforce this: it requires the
+      full execution history to know that a sensitive read occurred
+      earlier in the task.
+    rule_type: tainted_path_block
+    params:
+      taint_step_type: step.resource
+      taint_verb: GET
+      taint_property_filter:
+        data.classification: pii
+      target_step_types: ["step.message", "step.resource"]
+      target_verb: POST
+    severity: critical
+    scope: step_execution
+
+  # ==========================================================================
+  # LAYER 2: STRUCTURAL GATE
+  # ==========================================================================
+
+  - name: "External sends require an exfiltration review gate"
+    description: |
+      Defense-in-depth: all outbound messages (step.message) must be
+      preceded by an exfiltration_review gate somewhere in task history.
+      This catches cases where the taint policy does not apply (no
+      sensitive read) but the message content may still be risky.
+    rule_type: step_requires_gate
+    params:
+      target_step_types: ["step.message"]
+      gate_check_type: exfiltration_review
+    severity: critical
+    scope: step_execution
+
+  # ==========================================================================
+  # LAYER 3: NETWORK BOUNDARY
+  # ==========================================================================
+
+  - name: "Restrict outbound to approved domains"
+    description: |
+      Domain allowlist restricting step.resource targets to approved
+      internal endpoints. Blocks calls to unknown external domains.
+
+      IMPORTANT: Replace these example domains with your actual
+      approved endpoints before production use.
+    rule_type: domain_allowlist
+    params:
+      allowed_domains: ["internal.example.com", "api.example.com"]
+    severity: critical
+    scope: step_execution
+
+  # ==========================================================================
+  # LAYER 4: CONTENT INSPECTION
+  # ==========================================================================
+
+  - name: "Scan outbound payloads for PII patterns"
+    description: |
+      Content-level PII detection in outbound request payloads. Scans
+      for US Social Security Numbers, Dutch BSN (Citizen Service
+      Numbers), and email addresses.
+
+      IMPORTANT: Customize patterns for your jurisdiction and data
+      types before production use.
+    rule_type: pii_in_request
+    params:
+      patterns:
+        - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+        - "\\b\\d{9}\\b"
+        - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
+    severity: critical
+    scope: step_execution
+
+  # ==========================================================================
+  # LAYER 5: SEQUENCE PROHIBITION
+  # ==========================================================================
+
+  - name: "Forbid credential read followed by external send"
+    description: |
+      Prohibits the sequence step.credential -> step.message anywhere
+      in the task history. If an agent reads credentials and then
+      attempts an outbound message, the path is blocked. This prevents
+      credential exfiltration via indirect prompt injection.
+    rule_type: sequence_forbidden
+    params:
+      forbidden_sequence: ["step.credential", "step.message"]
+    severity: critical
+    scope: step_execution

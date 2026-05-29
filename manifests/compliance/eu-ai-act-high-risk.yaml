@@ -1,0 +1,223 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# EU AI Act - High Risk Compliance
+#
+# Covers Articles 6-15 for HIGH risk AI systems: risk classification,
+# detailed documentation, human oversight, data governance, and robustness.
+#
+# Based on: Regulation (EU) 2024/1689 (Official Journal, July 12, 2024)
+#
+# Pair with eu-ai-act-minimal.yaml for Article 50 transparency coverage
+# (transparency obligations apply to all risk tiers).
+
+name: "EU AI Act - High Risk Compliance"
+description: |
+  Policy set for EU AI Act compliance targeting HIGH risk AI systems under
+  Annex III. Implements requirements from Articles 6-15 covering:
+
+  - Risk classification validation (Article 6)
+  - Technical documentation (Articles 11, 13, Annex IV)
+  - Human oversight gates on mutating and external operations (Article 14)
+  - Data governance checkpoints (Article 10)
+  - Robustness controls via execution limits (Article 15)
+
+  Policies without a risk_classification field apply to all agents.
+  Policies with risk_classification: high apply only to HIGH risk agents.
+
+version: "1.0.0"
+
+policies:
+  # ==========================================================================
+  # AGENT REGISTRATION - CORE REQUIREMENTS (ALL AGENTS)
+  # ==========================================================================
+
+  - name: "Agent must specify risk classification"
+    description: |
+      EU AI Act Article 6 requires AI systems to be classified by risk level.
+      Risk classification determines which compliance obligations apply.
+      The field must not be empty.
+
+      Applies to: ALL risk classifications.
+    rule_type: field_not_empty
+    params:
+      field: risk_classification
+    severity: critical
+    scope: agent_registration
+
+  - name: "Risk classification must be valid"
+    description: |
+      EU AI Act Article 6: validates that risk classification uses only
+      permitted values (high, limited, minimal). Systems classified as
+      unacceptable risk (Article 5) must not be deployed.
+
+      Applies to: ALL risk classifications.
+    rule_type: field_in_list
+    params:
+      field: risk_classification
+      values: ["high", "limited", "minimal"]
+    severity: critical
+    scope: agent_registration
+
+  - name: "Agent must have a documented purpose"
+    description: |
+      EU AI Act Articles 11 and 13 require clear documentation of AI system
+      purpose. Article 13 specifically requires instructions for use that
+      enable deployers to interpret the system's output appropriately.
+
+      Applies to: ALL risk classifications.
+    rule_type: field_not_empty
+    params:
+      field: purpose
+    severity: high
+    scope: agent_registration
+
+  - name: "Agent must have an identifying name"
+    description: |
+      EU AI Act Article 13 requires that AI systems be clearly identifiable.
+      Deployers must be able to identify the system and understand its
+      characteristics.
+
+      Applies to: ALL risk classifications.
+    rule_type: field_not_empty
+    params:
+      field: name
+    severity: high
+    scope: agent_registration
+
+  - name: "Agent must have a designated owner"
+    description: |
+      EU AI Act Article 16 establishes provider obligations including
+      maintaining a quality management system and taking responsibility.
+      Each agent must identify its responsible provider via owner_id.
+
+      Applies to: ALL risk classifications.
+    rule_type: field_not_empty
+    params:
+      field: owner_id
+    severity: high
+    scope: agent_registration
+
+  # ==========================================================================
+  # AGENT REGISTRATION - HIGH RISK ENHANCED DOCUMENTATION
+  # ==========================================================================
+
+  - name: "HIGH risk agents must have detailed purpose documentation"
+    description: |
+      EU AI Act Article 13(3)(b) requires that instructions for use for
+      high-risk AI systems contain detailed information to enable deployers
+      to properly interpret outputs. Minimum 50 characters ensures the
+      purpose description covers intended use, capabilities, and limitations.
+
+      Applies to: HIGH risk agents only.
+    rule_type: field_matches_regex
+    params:
+      field: purpose
+      pattern: "^.{50,}$"
+    severity: high
+    scope: agent_registration
+    risk_classification: high
+
+  - name: "HIGH risk agents must have a designated maintainer"
+    description: |
+      EU AI Act Article 17 requires a quality management system with clear
+      assignment of responsibilities. Article 20 requires corrective actions
+      to be taken by an identified responsible party. A maintainer field
+      supports both requirements.
+
+      Applies to: HIGH risk agents only.
+    rule_type: field_not_empty
+    params:
+      field: maintainer_id
+    severity: medium
+    scope: agent_registration
+    risk_classification: high
+
+  # ==========================================================================
+  # STEP EXECUTION - HUMAN OVERSIGHT (Article 14)
+  # ==========================================================================
+
+  - name: "HIGH risk - Mutating resource operations require human approval"
+    description: |
+      EU AI Act Article 14(4)(c) requires oversight measures including the
+      ability to interrupt the AI system. Write operations (POST) that modify
+      external state require a step.gate with human_approval check_type
+      immediately preceding the action.
+
+      Applies to: HIGH risk agents only.
+    rule_type: step_requires_gate
+    params:
+      target_step_types: ["step.resource", "step.message"]
+      target_verb: POST
+      gate_check_type: human_approval
+    severity: critical
+    scope: step_execution
+    risk_classification: high
+
+  - name: "HIGH risk - Destructive operations require human approval"
+    description: |
+      EU AI Act Article 14(4)(d) requires that humans can decide not to use
+      the AI system or override its output. DELETE operations are irreversible
+      and require explicit human approval via a step.gate.
+
+      Applies to: HIGH risk agents only.
+    rule_type: step_requires_gate
+    params:
+      target_step_types: ["step.resource"]
+      target_verb: DELETE
+      gate_check_type: human_approval
+    severity: critical
+    scope: step_execution
+    risk_classification: high
+
+  # ==========================================================================
+  # STEP EXECUTION - DATA GOVERNANCE (Article 10)
+  # ==========================================================================
+
+  - name: "HIGH risk - Data quality gate required before model calls"
+    description: |
+      EU AI Act Article 10(2) and 10(3) require data governance measures
+      including examination for biases and ensuring data relevance and
+      accuracy. A step.gate must appear in the task history before any
+      step.model call to confirm data quality checks have been performed.
+
+      Applies to: HIGH risk agents only.
+    rule_type: step_requires_predecessor
+    params:
+      required_step_type: step.gate
+      target_step_types: ["step.model"]
+    severity: high
+    scope: step_execution
+    risk_classification: high
+
+  # ==========================================================================
+  # STEP EXECUTION - ROBUSTNESS (Article 15)
+  # ==========================================================================
+
+  - name: "Limit resource calls per task for robustness"
+    description: |
+      EU AI Act Article 15(3) requires that high-risk AI systems be resilient
+      against errors, faults, and inconsistencies. Capping step.resource calls
+      at 50 per task prevents runaway loops, potential abuse, and cascading
+      failures.
+
+      Applies to: ALL risk classifications.
+    rule_type: execution_max_steps
+    params:
+      step_type: step.resource
+      max_steps: 50
+    severity: high
+    scope: step_execution
+
+  - name: "Limit model calls per task for robustness"
+    description: |
+      EU AI Act Article 15(1) requires appropriate levels of accuracy and
+      robustness. Capping step.model calls at 30 per task prevents excessive
+      inference loops that may indicate errors or adversarial manipulation.
+
+      Applies to: ALL risk classifications.
+    rule_type: execution_max_steps
+    params:
+      step_type: step.model
+      max_steps: 30
+    severity: high
+    scope: step_execution

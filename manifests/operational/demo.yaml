@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Kyvvu Demo Manifest
+#
+# Minimal manifest for quickstart tutorials and integration tests. Contains
+# one registration policy and one step-execution policy to demonstrate the
+# two evaluation scopes.
+#
+# This is NOT a production manifest. Use the compliance/ and security/
+# manifests for real deployments.
+
+name: "Kyvvu Demo"
+description: |
+  Starter manifest for new Kyvvu installations and quickstart tutorials.
+  Contains two basic governance policies: one registration-time check and
+  one runtime guard-rail.
+
+version: "1.0.0"
+
+policies:
+  - name: "Agent purpose required"
+    description: |
+      All agents must have a documented purpose. This is the simplest
+      registration-time policy and demonstrates the agent_registration
+      evaluation scope.
+    rule_type: field_not_empty
+    params:
+      field: purpose
+    severity: high
+    scope: agent_registration
+
+  - name: "Max LLM calls per task"
+    description: |
+      Guard-rail limiting the total number of step.model (LLM inference)
+      calls within a single task execution. Set to 10 for demo purposes.
+      Demonstrates the step_execution evaluation scope.
+    rule_type: execution_max_steps
+    params:
+      step_type: step.model
+      max_steps: 10
+    severity: critical
+    scope: step_execution
