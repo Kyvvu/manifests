@@ -1,0 +1,184 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Claude Code Safety Manifest
+#
+# Default safety manifest for Claude Code sessions. Protects developers
+# from common autonomous coding agent risks without interfering with
+# normal development workflow. Assign to any agent registered via
+# kyvvu-claude.
+
+name: "Claude Code Safety"
+description: |
+  Default safety manifest for Claude Code agents. Every policy addresses
+  a real risk that developers face when using autonomous coding agents:
+  credential exfiltration, destructive commands, scope escape, runaway
+  loops, and PII leakage.
+
+  All runtime policies are severity: critical (= block). These are
+  genuinely dangerous actions where "warn but allow" makes no sense.
+  Teams can downgrade individual policies to high (= warn) if they
+  prefer softer enforcement.
+
+  Designed for agents registered via kyvvu-claude. Assign via the Kyvvu
+  dashboard or API.
+
+version: "1.0.0"
+
+policies:
+  # ==========================================================================
+  # CREDENTIAL EXFILTRATION GUARD
+  #
+  # The #1 risk with coding agents: Read(.env) -> Bash(curl ...) leaks
+  # secrets. Taint is permanent within the task — start a new session to
+  # clear.
+  # ==========================================================================
+
+  - name: "No exec after secret read"
+    description: |
+      Block Bash execution after reading files classified as secrets
+      (.env, .pem, .key, credentials, pgpass, netrc). The kyvvu-claude
+      mapper automatically classifies these files with
+      data.classification: secret.
+
+      Taint is permanent within the task. Start a new Claude Code session
+      (or /clear) to reset.
+    rule_type: tainted_path_block
+    params:
+      taint_step_type: step.resource
+      taint_verb: GET
+      taint_property_filter:
+        data.classification: secret
+      target_step_types: ["step.exec"]
+    severity: critical
+    scope: step_execution
+
+  - name: "No network after secret read"
+    description: |
+      Block network access (WebFetch) after reading files classified as
+      secrets. Prevents data exfiltration via HTTP requests.
+
+      Note: this blocks ALL step.resource GET after a secret read, which
+      includes file reads. This is intentionally conservative — start a
+      new session to reset the taint.
+    rule_type: tainted_path_block
+    params:
+      taint_step_type: step.resource
+      taint_verb: GET
+      taint_property_filter:
+        data.classification: secret
+      target_step_types: ["step.resource"]
+      target_verb: GET
+    severity: critical
+    scope: step_execution
+
+  # ==========================================================================
+  # DESTRUCTIVE COMMAND PROTECTION
+  # ==========================================================================
+
+  - name: "No force push"
+    description: |
+      Prevent git push --force which can destroy remote history.
+      Use git push --force-with-lease if a force push is truly needed.
+      Uses 'not' compound rule because field_matches_regex returns True
+      when the field matches — we want to block when it matches.
+    rule_type: not
+    params:
+      condition:
+        rule_type: field_matches_regex
+        params:
+          field: exec.command
+          pattern: "git\\s+push\\s+.*--force"
+    severity: critical
+    scope: step_execution
+
+  - name: "No rm -rf root"
+    description: |
+      Prevent rm -rf on root, home, or parent directories.
+      Catches common path-confusion bugs in autonomous agents.
+    rule_type: not
+    params:
+      condition:
+        rule_type: field_matches_regex
+        params:
+          field: exec.command
+          pattern: "rm\\s+-[\\w]*r[\\w]*f[\\w]*\\s+(/|~/|\\$HOME)"
+    severity: critical
+    scope: step_execution
+
+  - name: "No git reset --hard"
+    description: |
+      Prevent git reset --hard which discards all uncommitted work.
+      Use git stash or create a commit before resetting.
+    rule_type: not
+    params:
+      condition:
+        rule_type: field_matches_regex
+        params:
+          field: exec.command
+          pattern: "git\\s+reset\\s+--hard"
+    severity: critical
+    scope: step_execution
+
+  # ==========================================================================
+  # SCOPE CONTAINMENT
+  # ==========================================================================
+
+  - name: "No write outside project"
+    description: |
+      Block file writes to sensitive system and user paths: /etc, /usr,
+      /var, /System, /Library, ~/.ssh, ~/.aws. File writes should stay
+      within the project directory.
+    rule_type: not
+    params:
+      condition:
+        rule_type: field_matches_regex
+        params:
+          field: target.host
+          pattern: "^(/etc/|/usr/|/var/|/System/|/Library/|/home/[^/]+/\\.ssh|/home/[^/]+/\\.aws|/Users/[^/]+/\\.ssh|/Users/[^/]+/\\.aws)"
+    severity: critical
+    scope: step_execution
+
+  # ==========================================================================
+  # RUNAWAY PREVENTION
+  # ==========================================================================
+
+  - name: "Max exec per task"
+    description: |
+      Limit Bash executions to 50 per task. Prevents infinite retry loops
+      and runaway scripts. Start a new session to reset the counter.
+    rule_type: execution_max_steps
+    params:
+      step_type: step.exec
+      max_steps: 50
+    severity: critical
+    scope: step_execution
+
+  - name: "Max consecutive exec"
+    description: |
+      No more than 10 consecutive Bash calls without a file read or write
+      in between. Catches agents stuck in compile/test retry loops.
+    rule_type: max_consecutive_same_type
+    params:
+      step_type: step.exec
+      max_consecutive: 10
+    severity: critical
+    scope: step_execution
+
+  # ==========================================================================
+  # PII SCANNING
+  # ==========================================================================
+
+  - name: "No PII in commands"
+    description: |
+      Detect common PII patterns in Bash command inputs: US Social
+      Security Numbers and credit card numbers. Prevents accidental
+      PII exposure in shell history and logs.
+
+      Customize patterns for your jurisdiction before production use.
+    rule_type: pii_in_request
+    params:
+      patterns:
+        - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+        - "\\b\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}\\b"
+    severity: critical
+    scope: step_execution
