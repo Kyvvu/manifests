@@ -98,3 +98,4 @@ See [docs/authoring-guide.md](docs/authoring-guide.md) for how to write a manife
 ## License
 
 Manifests are licensed under Apache 2.0 — see [LICENSE](LICENSE). The Kyvvu engine that evaluates them is licensed under BSL 1.1.
+

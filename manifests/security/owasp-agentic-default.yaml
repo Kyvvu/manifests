@@ -121,7 +121,7 @@ policies:
     rule_type: step_name_in_allowlist
     params:
       agent_field: declared_tools
-      target_step_types: ["step.resource", "step.exec", "step.credential", "step.message", "step.self"]
+      target_step_types: ["step.resource", "step.exec", "step.credential"]
     severity: critical
     scope: step_execution
 
