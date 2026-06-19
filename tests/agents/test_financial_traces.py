@@ -65,6 +65,28 @@ def _behavior(
     )
 
 
+@pytest.fixture(autouse=True)
+def _freeze_market_hours(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Freeze ``RuleContext.now`` to within market hours (10:00 UTC ≈ 12:00 CET).
+
+    The financial manifest includes a ``working_hours_only`` policy (08:00-18:00
+    Europe/Amsterdam) that reads wall-clock ``context.now``. Without this freeze,
+    every "compliant → allow" test is wall-clock flaky — it passes during market
+    hours and fails after 18:00 CET / before 08:00 CET. Time-specific tests
+    (:class:`TestWorkingHours`) re-freeze to their own instant, overriding this.
+    """
+    import kyvvu_engine.rules._context as ctx_mod
+
+    frozen = datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc)
+
+    class _FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz: timezone | None = None) -> datetime:  # type: ignore[override]
+            return frozen if tz is None else frozen.astimezone(tz)
+
+    monkeypatch.setattr(ctx_mod, "datetime", _FrozenDatetime)
+
+
 class TestRegistration:
     """Financial services registration policies."""
 
@@ -193,6 +215,103 @@ class TestMarketDataTaint:
             ctx,
         )
         assert result.action == Action.allow
+
+
+class TestWorkingHours:
+    """MiFID II Article 48: execution restricted to market hours (08:00-18:00 CET).
+
+    ``working_hours_only`` reads ``context.now`` (UTC wall-clock captured when
+    the RuleContext is built). To make these deterministic we freeze that clock
+    by patching the ``datetime`` symbol in the rule-context module.
+    """
+
+    @staticmethod
+    def _freeze(monkeypatch: pytest.MonkeyPatch, frozen: datetime) -> None:
+        """Freeze RuleContext.now to ``frozen`` (a tz-aware UTC datetime)."""
+        import kyvvu_engine.rules._context as ctx_mod
+
+        class _FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz: timezone | None = None) -> datetime:  # type: ignore[override]
+                return frozen if tz is None else frozen.astimezone(tz)
+
+        monkeypatch.setattr(ctx_mod, "datetime", _FrozenDatetime)
+
+    def test_compliant_within_market_hours(
+        self, policies: list[dict], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A step at 10:00 UTC (~11:00 CET) is within the 08-18 CET window."""
+        self._freeze(monkeypatch, datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc))
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(StepType.step_model, Verb.POST, step_name="market_analysis"),
+            _ctx(),
+        )
+        assert result.action == Action.allow
+
+    def test_violating_outside_market_hours(
+        self, policies: list[dict], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A step at 23:00 UTC (~00:00 CET) is outside the 08-18 CET window."""
+        self._freeze(monkeypatch, datetime(2026, 1, 5, 23, 0, tzinfo=timezone.utc))
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(StepType.step_model, Verb.POST, step_name="market_analysis"),
+            _ctx(),
+        )
+        assert result.action == Action.block
+
+
+class TestLlmCallLimit:
+    """DORA Article 9: at most 20 model calls per task (execution_max_steps).
+
+    The limit policy is severity ``high`` (warn, not block). The "within limit"
+    case freezes the clock inside market hours so the co-resident
+    ``working_hours_only`` (critical) rule does not interfere.
+    """
+
+    def test_compliant_within_llm_limit(
+        self, policies: list[dict], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """20 prior model calls — the 20th evaluation is still within the limit."""
+        TestWorkingHours._freeze(
+            monkeypatch, datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc)
+        )
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx()
+        for i in range(19):
+            engine.record(
+                _behavior(StepType.step_model, Verb.POST, step_name=f"infer_{i}")
+            )
+        result = engine.evaluate(
+            _behavior(StepType.step_model, Verb.POST, step_name="infer_20"),
+            ctx,
+        )
+        assert result.action == Action.allow
+
+    def test_violating_exceeds_llm_limit(self, policies: list[dict]) -> None:
+        """A 21st model call exceeds the 20-call limit (severity high → warn)."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx()
+        for i in range(20):
+            engine.record(
+                _behavior(StepType.step_model, Verb.POST, step_name=f"infer_{i}")
+            )
+        result = engine.evaluate(
+            _behavior(StepType.step_model, Verb.POST, step_name="infer_21"),
+            ctx,
+        )
+        # severity=high → warn; assert the limit triggered a non-allow outcome
+        # and that the limit policy itself is the one that flagged.
+        assert result.action != Action.allow
+        assert any(
+            p.violated and p.rule_type == "execution_max_steps"
+            for p in result.policies
+        )
 
 
 class TestApprovalIntegrity:

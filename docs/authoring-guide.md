@@ -137,7 +137,11 @@ params:
 ## Testing workflow
 
 1. Write your manifest YAML in the appropriate subdirectory.
-2. Add agent trace tests in `tests/agents/` — at least one compliant and one violating trace.
+2. Add agent trace tests in `tests/agents/` — at least one compliant (allow) and
+   one violating (deny) trace per policy. Build the trace with `engine.record(...)`
+   for prior steps and `engine.evaluate(...)` for the intended step, then assert on
+   `result.action` and the per-policy `result.policies[*].rule_type`. This match /
+   no-match fixture style is the shared convention for behavioral coverage.
 3. Run validation:
 
 ```bash

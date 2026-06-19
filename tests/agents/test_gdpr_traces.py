@@ -88,6 +88,19 @@ class TestRegistration:
         )
         assert result.action != Action.allow
 
+    def test_violating_short_purpose_regex(self, policies: list[dict]) -> None:
+        """A non-empty purpose under 30 chars passes field_not_empty but fails the regex."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate_registration(
+            {"purpose": "support tickets", "maintainer_id": "dpo@example.com"},
+            _ctx(),
+        )
+        assert result.action != Action.allow
+        violated = {p.rule_type for p in result.policies if p.violated}
+        assert "field_matches_regex" in violated
+        assert "field_not_empty" not in violated  # the field is present, just too short
+
 
 class TestErasureGate:
     """Article 17: DELETE operations require an erasure_approval gate."""

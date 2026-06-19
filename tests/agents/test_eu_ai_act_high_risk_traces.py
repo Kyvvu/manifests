@@ -108,6 +108,71 @@ class TestRegistration:
         )
         assert result.action != Action.allow
 
+    def test_violating_missing_maintainer_for_high_risk(self, policies: list[dict]) -> None:
+        """HIGH risk agent without a maintainer_id violates field_not_empty."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate_registration(
+            {
+                "risk_classification": "high",
+                "purpose": (
+                    "Automated credit scoring system for consumer loan applications "
+                    "using financial history and behavioural data"
+                ),
+                "name": "Credit Scorer v3",
+                "owner_id": "compliance@bank.example.com",
+                # maintainer_id deliberately omitted
+            },
+            _ctx(),
+        )
+        assert result.action != Action.allow
+        assert any(
+            p.violated
+            and p.rule_type == "field_not_empty"
+            and p.name == "HIGH risk agents must have a designated maintainer"
+            for p in result.policies
+        )
+
+
+class TestDataQualityGate:
+    """Article 10: a step.gate must precede any step.model (step_requires_predecessor)."""
+
+    def test_compliant_model_after_gate(self, policies: list[dict]) -> None:
+        """A model call preceded by a gate satisfies the data-quality predecessor."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx()
+        engine.record(
+            _behavior(
+                StepType.step_gate,
+                step_name="data_quality_check",
+                properties={"guard": {"check_type": "data_quality", "result": "pass"}},
+            )
+        )
+        result = engine.evaluate(
+            _behavior(StepType.step_model, Verb.POST, step_name="score_applicant"),
+            ctx,
+        )
+        assert not any(
+            p.violated and p.rule_type == "step_requires_predecessor"
+            for p in result.policies
+        )
+
+    def test_violating_model_without_predecessor_gate(self, policies: list[dict]) -> None:
+        """A model call with no prior step.gate violates step_requires_predecessor."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx()
+        result = engine.evaluate(
+            _behavior(StepType.step_model, Verb.POST, step_name="score_applicant"),
+            ctx,
+        )
+        assert result.action != Action.allow
+        assert any(
+            p.violated and p.rule_type == "step_requires_predecessor"
+            for p in result.policies
+        )
+
 
 class TestHumanOversight:
     """Article 14: human oversight gates on mutating operations."""

@@ -155,6 +155,83 @@ class TestPiiDetection:
         assert result.action == Action.allow
 
 
+class TestPatientConsentGate:
+    """PHI access (step.resource) requires a patient_consent gate first."""
+
+    def test_compliant_resource_after_consent(self, policies: list[dict]) -> None:
+        """A resource access preceded by a patient_consent gate is permitted."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx()
+        engine.record(
+            _behavior(
+                StepType.step_gate,
+                step_name="consent",
+                properties={"guard": {"check_type": "patient_consent", "result": "pass"}},
+            )
+        )
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                Verb.GET,
+                step_name="read_patient_record",
+                properties={"target": {"host": "ehr.example.com"}},
+            ),
+            ctx,
+        )
+        assert result.action == Action.allow
+
+    def test_violating_resource_without_consent(self, policies: list[dict]) -> None:
+        """A resource access with no consent gate in history is blocked."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                Verb.GET,
+                step_name="read_patient_record",
+                properties={"target": {"host": "ehr.example.com"}},
+            ),
+            _ctx(),
+        )
+        assert result.action == Action.block
+        assert any(
+            p.violated and p.rule_type == "step_requires_gate"
+            for p in result.policies
+        )
+
+
+class TestHealthcareDomainAllowlist:
+    """PHI access restricted to approved healthcare domains."""
+
+    def test_violating_off_allowlist_domain(self, policies: list[dict]) -> None:
+        """A resource call to an unapproved host is blocked (even with consent)."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx()
+        engine.record(
+            _behavior(
+                StepType.step_gate,
+                step_name="consent",
+                properties={"guard": {"check_type": "patient_consent", "result": "pass"}},
+            )
+        )
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                Verb.GET,
+                step_name="read_external",
+                properties={"target": {"host": "leak.example.org"}},
+            ),
+            ctx,
+        )
+        assert result.action == Action.block
+        assert any(
+            p.violated and p.rule_type == "domain_allowlist"
+            for p in result.policies
+        )
+
+
 class TestCodeExecutionForbidden:
     """step.exec is forbidden for high-risk healthcare agents."""
 

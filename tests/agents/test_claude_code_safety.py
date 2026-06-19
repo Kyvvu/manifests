@@ -42,6 +42,7 @@ def _behavior(
     properties: dict | None = None,
     task_id: str = "t1",
     step: int = 1,
+    input_data: dict | None = None,
 ) -> Behavior:
     scope = Scope.task if step_type.value.startswith("task.") else Scope.step
     return Behavior(
@@ -53,6 +54,7 @@ def _behavior(
         verb=verb,
         step_name=step_name,
         properties=properties or {},
+        input=input_data,
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 
@@ -110,6 +112,21 @@ class TestDestructiveCommandProtection:
         )
         assert result.action == Action.block
 
+    def test_chained_and_prefixed_commands_blocked(self, policies: list[dict]) -> None:
+        # The engine matches start-anchored (re.match); the command-position
+        # prefix must catch dangerous commands that are not the first token.
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        for cmd in ("cd repo && git push --force", "sudo rm -rf /", "build; git reset --hard"):
+            result = engine.evaluate(
+                _behavior(
+                    StepType.step_exec,
+                    properties={"exec": {"command": cmd}},
+                ),
+                _ctx(),
+            )
+            assert result.action == Action.block, f"should block: {cmd!r}"
+
     def test_normal_push_allowed(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -124,7 +141,19 @@ class TestDestructiveCommandProtection:
 
 
 class TestScopeContainment:
-    """field_matches_regex + not: blocks writes outside project."""
+    """path_within_root: allowlist containment — blocks any write outside project_root.
+
+    The "No write outside project" policy is now allowlist containment (#239
+    Layer C): instead of a hardcoded denylist of sensitive directories, it
+    blocks any write whose target does not resolve under the session
+    project_root. This is strictly stronger — it also covers /tmp and sibling
+    repos that the old denylist silently allowed.
+    """
+
+    _ROOT = "/Users/dev/project"
+
+    def _rooted_ctx(self) -> EvalContext:
+        return _ctx(project_root=self._ROOT)
 
     def test_write_etc_blocked(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
@@ -135,7 +164,35 @@ class TestScopeContainment:
                 verb=Verb.POST,
                 properties={"target": {"host": "/etc/passwd"}},
             ),
-            _ctx(),
+            self._rooted_ctx(),
+        )
+        assert result.action == Action.block
+        assert "No write outside project" in [p.name for p in result.policies if p.violated]
+
+    def test_write_tmp_blocked(self, policies: list[dict]) -> None:
+        # The old denylist allowed /tmp; the allowlist blocks it.
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                verb=Verb.POST,
+                properties={"target": {"host": "/tmp/out.txt"}},
+            ),
+            self._rooted_ctx(),
+        )
+        assert result.action == Action.block
+
+    def test_write_sibling_repo_blocked(self, policies: list[dict]) -> None:
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                verb=Verb.POST,
+                properties={"target": {"host": "/Users/dev/other-repo/x.py"}},
+            ),
+            self._rooted_ctx(),
         )
         assert result.action == Action.block
 
@@ -148,7 +205,7 @@ class TestScopeContainment:
                 verb=Verb.POST,
                 properties={"target": {"host": "/Users/dev/project/main.py"}},
             ),
-            _ctx(),
+            self._rooted_ctx(),
         )
         assert result.action == Action.allow
 
@@ -161,9 +218,55 @@ class TestScopeContainment:
                 verb=Verb.POST,
                 properties={"target": {"host": "/Users/dev/.ssh/id_rsa"}},
             ),
-            _ctx(),
+            self._rooted_ctx(),
         )
         assert result.action == Action.block
+
+    def test_bash_shell_write_outside_blocked(self, policies: list[dict]) -> None:
+        # Layer B sets target.host for shell writes; Layer C contains them.
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_exec,
+                properties={
+                    "exec": {"command": "echo x > /etc/hosts"},
+                    "target": {"host": "/etc/hosts", "resource_type": "file"},
+                },
+            ),
+            self._rooted_ctx(),
+        )
+        assert result.action == Action.block
+
+    def test_read_outside_project_allowed(self, policies: list[dict]) -> None:
+        # Reads (GET) are not contained by this policy — taint policies govern them.
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                verb=Verb.GET,
+                properties={"target": {"host": "/usr/include/stdio.h"}},
+            ),
+            self._rooted_ctx(),
+        )
+        assert result.action == Action.allow
+
+    def test_no_project_root_fails_open(self, policies: list[dict]) -> None:
+        # Without a project_root, containment is impossible — the rule allows.
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                verb=Verb.POST,
+                properties={"target": {"host": "/etc/passwd"}},
+            ),
+            _ctx(),  # no project_root
+        )
+        assert "No write outside project" not in [
+            p.name for p in result.policies if p.violated
+        ]
 
 
 class TestTaintedPathPolicies:
@@ -290,3 +393,46 @@ class TestRunawayPrevention:
             _ctx(),
         )
         assert result.action == Action.block
+
+
+class TestNoPiiInCommands:
+    """pii_in_request: blocks Bash commands containing PII (SSN / card numbers).
+
+    The mapper records the raw tool input (e.g. ``{"command": "..."}``) on the
+    behavior's ``input`` field, which is what ``pii_in_request`` scans.
+    """
+
+    def test_ssn_in_command_blocked(self, policies: list[dict]) -> None:
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_exec,
+                step_name="Bash",
+                properties={"exec": {"command": "echo 123-45-6789 >> notes.txt"}},
+                input_data={"command": "echo 123-45-6789 >> notes.txt"},
+            ),
+            _ctx(),
+        )
+        assert result.action == Action.block
+        assert any(
+            p.violated and p.rule_type == "pii_in_request"
+            for p in result.policies
+        )
+
+    def test_clean_command_no_pii(self, policies: list[dict]) -> None:
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_exec,
+                step_name="Bash",
+                properties={"exec": {"command": "ls -la"}},
+                input_data={"command": "ls -la"},
+            ),
+            _ctx(),
+        )
+        assert not any(
+            p.violated and p.rule_type == "pii_in_request"
+            for p in result.policies
+        )

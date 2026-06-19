@@ -87,21 +87,97 @@ policies:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: "git\\s+push\\s+.*--force"
+          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?git\\s+push\\s+.*--force"
     severity: critical
     scope: step_execution
 
-  - name: "No rm -rf root"
+  # ==========================================================================
+  # DESTRUCTIVE DELETE PROTECTION
+  #
+  # Replaces the single "No rm -rf root" policy with one policy per target
+  # class, so each pattern stays readable and testable. Three decisions are
+  # factored consistently across all of them:
+  #
+  #   1. Recursive detection is FORCE-AGNOSTIC. `rm -r /` is as catastrophic
+  #      as `rm -rf /`; the old f-requirement let `rm -r /` through. We match
+  #      on the recursive flag and ignore whether -f is present.
+  #   2. The recursive fragment `-\S*[rR]\S*` tolerates flag order and split
+  #      flags: -rf, -fr, -Rf, -r -f, -f -r, --recursive all match. (The old
+  #      -[\w]*r[\w]*f[\w]* required r-before-f and missed -fr and split flags.)
+  #   3. Targets are anchored so SCOPED paths are allowed: `rm -rf /tmp/x` and
+  #      `rm -rf ~/project/build` pass; only root, home, and parent-climb block.
+  #   4. Command-position prefix: the engine matches start-anchored (re.match),
+  #      so each pattern allows a leading command separator (; && || |) or a
+  #      known exec-wrapper (sudo/doas/env/xargs/time/nice) before `rm`. This
+  #      catches `sudo rm -rf /` and `cd x && rm -rf /`, while `echo rm -rf /`
+  #      (rm as an argument, not executed) correctly passes.
+  #
+  # Regex cannot catch quoted targets (`rm -rf "/"`), env indirection
+  # (`T=/; rm -rf $T`), semantic equivalents (`find / -delete`), newline-chained
+  # commands, or exec-wrappers outside the allowlist (`command rm`, `nohup rm`).
+  # Those need a command parser and are out of scope here — documented, not
+  # pretended; the real boundary is an OS-level read-only mount.
+  # Patterns are covered by a match/no-match fixture (tests/rm_policies.py);
+  # edit the fixture, not just the regex.
+  # ==========================================================================
+
+  - name: "No recursive delete of root"
     description: |
-      Prevent rm -rf on root, home, or parent directories.
-      Catches common path-confusion bugs in autonomous agents.
+      Block recursive rm targeting filesystem root: rm -rf /, rm -r /,
+      rm -rf /*, and root followed by trailing options. Force flag irrelevant.
     rule_type: not
     params:
       condition:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: "rm\\s+-[\\w]*r[\\w]*f[\\w]*\\s+(/|~/|\\$HOME)"
+          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*/(?:\\s|$|\\*)"
+    severity: critical
+    scope: step_execution
+
+  - name: "No recursive delete of home"
+    description: |
+      Block recursive rm targeting the home directory: rm -rf ~, ~/, $HOME,
+      $HOME/. A named subdir of home (rm -rf ~/project/build) is allowed.
+    rule_type: not
+    params:
+      condition:
+        rule_type: field_matches_regex
+        params:
+          field: exec.command
+          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*(?:~|\\$HOME)/?(?:\\s|$)"
+    severity: critical
+    scope: step_execution
+
+  - name: "No recursive delete via parent traversal"
+    description: |
+      Block recursive rm that climbs out of the tree via parent refs:
+      rm -rf .., ../.., ../../... A named relative path (rm -rf ../sibling)
+      is allowed; only pure ..-chains block.
+    rule_type: not
+    params:
+      condition:
+        rule_type: field_matches_regex
+        params:
+          field: exec.command
+          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*\\.\\.(?:/\\.\\.)*/?(?:\\s|$)"
+    severity: critical
+    scope: step_execution
+
+  - name: "No recursive delete of system directories"
+    description: |
+      Block recursive rm into protected system paths (/etc, /bin, /lib, /boot,
+      /System, /Library, ...). Mirrors the write-scope policy for exec/rm.
+      NOTE: /usr and /var are intentionally NOT listed — /usr/local and
+      /var/tmp see legitimate use. Add them only if your environment warrants,
+      and extend the fixture if you do.
+    rule_type: not
+    params:
+      condition:
+        rule_type: field_matches_regex
+        params:
+          field: exec.command
+          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*/(?:etc|bin|sbin|lib|lib64|boot|sys|proc|dev|System|Library)(?:/|\\s|$)"
     severity: critical
     scope: step_execution
 
@@ -115,7 +191,7 @@ policies:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: "git\\s+reset\\s+--hard"
+          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?git\\s+reset\\s+--hard"
     severity: critical
     scope: step_execution
 
@@ -125,16 +201,84 @@ policies:
 
   - name: "No write outside project"
     description: |
-      Block file writes to sensitive system and user paths: /etc, /usr,
-      /var, /System, /Library, ~/.ssh, ~/.aws. File writes should stay
-      within the project directory.
+      Allowlist containment (#239 Layer C): block any write whose target path
+      does not resolve under the session project_root. This is strictly stronger
+      than the previous denylist — it covers /tmp, sibling repos, and every other
+      out-of-project path, not just a hardcoded list of sensitive directories,
+      and it applies whether the write comes from the Write/Edit tools or from a
+      Bash shell write (Layer B sets target.host for shell writes too).
+
+      Scoped to write operations: step.exec (Bash, which only sets target.host
+      when the command writes) and step.resource POST/PATCH (Write/Edit/
+      NotebookEdit). Reads (GET) are intentionally NOT contained here — they are
+      governed by the secret-read / taint policies above.
+
+      Containment requires project_root to be known. kyvvu-claude populates it
+      from the session cwd; if it is unknown the rule fails open (allows), since
+      containment is impossible without a root.
+
+      Known limit: paths are normalized lexically (no filesystem I/O), so '..'
+      is collapsed but symlinks pointing out of the tree are not resolved. The
+      OS read-only mount complements (does not replace) this control.
+    rule_type: path_within_root
+    params:
+      field: target.host
+      target_step_types: ["step.exec", "step.resource"]
+      target_verbs: ["POST", "PATCH", "DELETE"]
+    severity: critical
+    scope: step_execution
+
+  # --------------------------------------------------------------------------
+  # SHELL WRITE / SECRET-READ STOPGAPS (#239 Layer A)
+  #
+  # "No write outside project" only inspects target.host, which the Write/Edit
+  # tools set — Bash is blind to it. These two exec.command regex policies are a
+  # stopgap that close the most common shell write/secret-read vectors directly
+  # on the command string. They mirror the destructive-delete pattern (`not` over
+  # `field_matches_regex` on exec.command) and use only the existing engine rule.
+  #
+  # The engine evaluates field_matches_regex with re.match (start-anchored), so
+  # both patterns begin with `.*` to find the operator anywhere in the command.
+  #
+  # HONEST LIMIT (regex on an opaque shell string cannot catch these — they need
+  # a command parser and are out of scope; documented, not pretended):
+  #   * env indirection / quoting:  T=/etc; echo x > $T/passwd ; cat "$SECRET"
+  #   * here-docs / python -c:       python -c "open('/etc/x','w')"
+  #   * sed -i:                       the write pattern intentionally omits sed -i
+  #                                   (Layer B's mapper + Layer C's containment
+  #                                   cover writes structurally).
+  # Patterns are covered by a match/no-match fixture (tests/shell_policies.py);
+  # edit the fixture, not just the regex.
+  # --------------------------------------------------------------------------
+
+  - name: "No shell write to sensitive paths"
+    description: |
+      Block shell write operations (redirect, tee, cp, mv, dd, install)
+      targeting sensitive system/user paths. Complements
+      "No write outside project", which only inspects the Write/Edit tools —
+      Bash is the most common write-bypass vector.
     rule_type: not
     params:
       condition:
         rule_type: field_matches_regex
         params:
-          field: target.host
-          pattern: "^(/etc/|/usr/|/var/|/System/|/Library/|/home/[^/]+/\\.ssh|/home/[^/]+/\\.aws|/Users/[^/]+/\\.ssh|/Users/[^/]+/\\.aws)"
+          field: exec.command
+          pattern: ".*(>>?|tee\\s+(-a\\s+)?|\\bcp\\s+|\\bmv\\s+|\\bdd\\b.*\\bof=|\\binstall\\s+).*(/etc/|/usr/|/var/|/System/|/Library/|/boot/|(~|\\$HOME)/\\.ssh|(~|\\$HOME)/\\.aws|/Users/[^/]+/\\.(ssh|aws)|/home/[^/]+/\\.(ssh|aws))"
+    severity: critical
+    scope: step_execution
+
+  - name: "No shell read of secret files"
+    description: |
+      Block shell reads of secret files (cat/less/head/tail/cp/xxd/base64/strings
+      of .env, .pem, .key, credentials, pgpass, netrc). The tainted-path guard only
+      classifies secrets read via the Read tool; Bash `cat .env` bypasses it entirely.
+    rule_type: not
+    params:
+      condition:
+        rule_type: field_matches_regex
+        params:
+          field: exec.command
+          pattern: ".*\\b(cat|less|more|head|tail|cp|mv|xxd|base64|od|strings)\\b.*\\.(env|pem|key|secret|credentials|pgpass|netrc)(\\s|$|\"|')"
     severity: critical
     scope: step_execution
 

@@ -75,6 +75,59 @@ def _behavior(
     )
 
 
+class TestRegistration:
+    """Registration-scope policies: substantive purpose + declared tool allowlist.
+
+    Covers ``field_matches_regex`` (purpose must be >=30 chars) and
+    ``field_not_empty`` (declared_tools must be present), both severity high.
+    """
+
+    _VALID_PROFILE = {
+        "purpose": "Customer support triage agent with human escalation on refunds",
+        "declared_tools": ["search_kb", "create_ticket"],
+        "risk_classification": "high",
+    }
+
+    def test_compliant_registration(self, policies: list[dict]) -> None:
+        """A substantive purpose + non-empty declared_tools registers cleanly."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate_registration(dict(self._VALID_PROFILE), _ctx())
+        assert result.action == Action.allow
+
+    def test_violating_short_purpose(self, policies: list[dict]) -> None:
+        """A purpose under 30 chars violates the substantive-purpose regex."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        profile = {**self._VALID_PROFILE, "purpose": "chatbot"}
+        result = engine.evaluate_registration(profile, _ctx())
+        assert result.action != Action.allow
+        assert any(
+            p.violated and p.rule_type == "field_matches_regex"
+            for p in result.policies
+        )
+
+    def test_violating_missing_declared_tools(self, policies: list[dict]) -> None:
+        """A missing declared_tools field violates the tool-allowlist policy.
+
+        ``field_not_empty`` treats only ``None``/``""`` as empty (an empty list
+        passes), so the deny path is an undeclared field — which is the real
+        "agent never declared its tools" case this policy guards.
+        """
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        profile = {
+            "purpose": self._VALID_PROFILE["purpose"],
+            "risk_classification": "high",
+        }
+        result = engine.evaluate_registration(profile, _ctx())
+        assert result.action != Action.allow
+        assert any(
+            p.violated and p.rule_type == "field_not_empty"
+            for p in result.policies
+        )
+
+
 class TestToolAllowlist:
     """step_name_in_allowlist: blocks tool calls not in declared_tools."""
 

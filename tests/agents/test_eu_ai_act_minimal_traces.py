@@ -118,6 +118,24 @@ class TestRegistration:
         )
         assert result.action != Action.allow
 
+    def test_violating_short_purpose_regex(self, policies: list[dict]) -> None:
+        """A non-empty purpose under 20 chars fails the substantive-purpose regex."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate_registration(
+            {
+                "purpose": "demo",  # non-empty but < 20 chars
+                "name": "Support Bot",
+                "risk_classification": "limited",
+                "owner_id": "team@example.com",
+            },
+            _ctx(),
+        )
+        assert result.action != Action.allow
+        violated = {p.rule_type for p in result.policies if p.violated}
+        assert "field_matches_regex" in violated
+        assert "field_not_empty" not in violated
+
 
 class TestTransparencyObligations:
     """Step-execution policies: Article 50 transparency gates."""

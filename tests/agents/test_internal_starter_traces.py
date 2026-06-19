@@ -126,6 +126,141 @@ class TestToolAllowlist:
         assert result.action == Action.block
 
 
+class TestTokenBudget:
+    """usage_budget: cap cumulative step.model token usage at 100,000 per task."""
+
+    def test_compliant_within_budget(self, policies: list[dict]) -> None:
+        """Cumulative tokens under budget passes (kept under the consecutive
+        limit by interleaving a non-model step)."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx(agent_allowed_tools=["call_llm", "fetch_data"])
+        engine.record(
+            _behavior(
+                StepType.step_model,
+                Verb.POST,
+                step_name="call_llm",
+                properties={"usage": {"total_tokens": 40000}},
+            )
+        )
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_model,
+                Verb.POST,
+                step_name="call_llm",
+                properties={"usage": {"total_tokens": 5000}},
+            ),
+            ctx,
+        )
+        assert not any(
+            p.violated and p.rule_type == "usage_budget" for p in result.policies
+        )
+
+    def test_violating_exceeds_budget(self, policies: list[dict]) -> None:
+        """Cumulative recorded tokens over 100k blocks the next model call."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx(agent_allowed_tools=["call_llm", "fetch_data"])
+        # Two recorded model calls totalling 120k tokens (interleaved with a
+        # non-model step so the consecutive-loop rule does not also trip).
+        engine.record(
+            _behavior(
+                StepType.step_model,
+                Verb.POST,
+                step_name="call_llm",
+                properties={"usage": {"total_tokens": 60000}},
+            )
+        )
+        engine.record(_behavior(StepType.step_resource, Verb.GET, step_name="fetch_data"))
+        engine.record(
+            _behavior(
+                StepType.step_model,
+                Verb.POST,
+                step_name="call_llm",
+                properties={"usage": {"total_tokens": 60000}},
+            )
+        )
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_model,
+                Verb.POST,
+                step_name="call_llm",
+                properties={"usage": {"total_tokens": 1000}},
+            ),
+            ctx,
+        )
+        assert result.action == Action.block
+        assert any(
+            p.violated and p.rule_type == "usage_budget" for p in result.policies
+        )
+
+
+class TestDestructiveGate:
+    """step_requires_gate: DELETE operations require a preceding human gate."""
+
+    def test_compliant_delete_with_gate(self, policies: list[dict]) -> None:
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx(agent_allowed_tools=["delete_record"])
+        engine.record(
+            _behavior(
+                StepType.step_gate,
+                step_name="approval",
+                properties={"guard": {"check_type": "human_approval", "result": "pass"}},
+            )
+        )
+        result = engine.evaluate(
+            _behavior(StepType.step_resource, Verb.DELETE, step_name="delete_record"),
+            ctx,
+        )
+        assert not any(
+            p.violated and p.rule_type == "step_requires_gate" for p in result.policies
+        )
+
+    def test_violating_delete_without_gate(self, policies: list[dict]) -> None:
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx(agent_allowed_tools=["delete_record"])
+        result = engine.evaluate(
+            _behavior(StepType.step_resource, Verb.DELETE, step_name="delete_record"),
+            ctx,
+        )
+        assert result.action == Action.block
+        assert any(
+            p.violated and p.rule_type == "step_requires_gate" for p in result.policies
+        )
+
+
+class TestLlmCallLimit:
+    """execution_max_steps: cap step.model calls at 50 per task."""
+
+    def test_violating_exceeds_llm_limit(self, policies: list[dict]) -> None:
+        """A 51st model call exceeds the 50-call limit.
+
+        Model calls are interleaved with a non-model step so the
+        consecutive-loop rule (limit 5) is not what trips first.
+        """
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx(agent_allowed_tools=["call_llm", "fetch_data"])
+        for _ in range(50):
+            engine.record(
+                _behavior(StepType.step_model, Verb.POST, step_name="call_llm")
+            )
+            engine.record(
+                _behavior(StepType.step_resource, Verb.GET, step_name="fetch_data")
+            )
+        result = engine.evaluate(
+            _behavior(StepType.step_model, Verb.POST, step_name="call_llm"),
+            ctx,
+        )
+        assert result.action == Action.block
+        assert any(
+            p.violated and p.rule_type == "execution_max_steps"
+            for p in result.policies
+        )
+
+
 class TestConsecutiveLimit:
     """Prevent infinite LLM loops (max 5 consecutive step.model)."""
 

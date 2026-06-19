@@ -182,6 +182,90 @@ class TestGateRequirement:
         assert result.action == Action.block
 
 
+class TestDomainAllowlist:
+    """Layer 3: outbound resource calls restricted to approved domains."""
+
+    def test_violating_off_allowlist_domain(self, policies: list[dict]) -> None:
+        """A resource call to an unapproved host is blocked."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                Verb.GET,
+                step_name="fetch_external",
+                properties={"target": {"host": "evil.attacker.example"}},
+            ),
+            _ctx(),
+        )
+        assert result.action == Action.block
+        assert any(
+            p.violated and p.rule_type == "domain_allowlist"
+            for p in result.policies
+        )
+
+    def test_compliant_allowlisted_domain(self, policies: list[dict]) -> None:
+        """A resource call to an approved host passes the domain allowlist."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                Verb.GET,
+                step_name="fetch_internal",
+                properties={"target": {"host": "api.example.com"}},
+            ),
+            _ctx(),
+        )
+        assert not any(
+            p.violated and p.rule_type == "domain_allowlist"
+            for p in result.policies
+        )
+
+
+class TestPiiInPayload:
+    """Layer 4: outbound payloads scanned for PII patterns."""
+
+    def test_violating_ssn_in_payload(self, policies: list[dict]) -> None:
+        """An SSN in the request payload is blocked by pii_in_request."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                Verb.POST,
+                step_name="post_report",
+                properties={"target": {"host": "api.example.com"}},
+                input_data={"body": "Customer SSN is 123-45-6789"},
+            ),
+            _ctx(),
+        )
+        assert result.action == Action.block
+        assert any(
+            p.violated and p.rule_type == "pii_in_request"
+            for p in result.policies
+        )
+
+    def test_compliant_no_pii_in_payload(self, policies: list[dict]) -> None:
+        """A payload free of PII does not trip pii_in_request."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                Verb.POST,
+                step_name="post_report",
+                properties={"target": {"host": "api.example.com"}},
+                input_data={"body": "Quarterly revenue summary, no personal data."},
+            ),
+            _ctx(),
+        )
+        assert not any(
+            p.violated and p.rule_type == "pii_in_request"
+            for p in result.policies
+        )
+
+
 class TestSequenceForbidden:
     """Layer 5: credential read -> message is forbidden."""
 
