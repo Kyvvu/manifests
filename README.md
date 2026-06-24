@@ -1,6 +1,6 @@
 # Kyvvu Manifests
 
-A manifest is a YAML bundle of compliance policies that governs how AI agents behave at runtime. Bind a manifest to an agent via the Kyvvu CLI or dashboard to enforce it.
+A manifest is a YAML bundle of policies — security, safety, and compliance — that govern how AI agents behave at runtime. Bind a manifest to an agent via the Kyvvu CLI or dashboard to enforce it.
 
 ## Manifests
 
@@ -73,7 +73,7 @@ policies:
 
 ## Path-dependent enforcement
 
-Most agent governance tools evaluate each API call in isolation. Kyvvu policies are functions of the full execution history — a step that was safe in one context becomes a violation after a sensitive read, a tainted credential access, or a missing approval gate.
+Most agent security tools evaluate each action in isolation. Kyvvu policies are functions of the full execution history — a step that was safe in one context becomes a violation after a sensitive read, a tainted credential access, or a missing approval gate.
 
 **Example**: the `data-exfiltration-guard` manifest uses `tainted_path_block` to permanently block outbound messages after a sensitive data read. The same `step.message POST` is allowed in a clean task but blocked once PII-classified data enters the task history. See [`examples/exfiltration_demo.py`](examples/exfiltration_demo.py) for a runnable demonstration.
 
