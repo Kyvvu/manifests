@@ -13,7 +13,6 @@ from kyvvu_engine.schemas import (
     Action,
     Behavior,
     EvalContext,
-    Scope,
     StepType,
     Verb,
 )
@@ -52,12 +51,10 @@ def _behavior(
     step_name: str = "test_step",
     properties: dict | None = None,
 ) -> Behavior:
-    scope = Scope.task if step_type.value.startswith("task.") else Scope.step
     return Behavior(
         agent_id="finance-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
-        scope=scope,
         step_type=step_type,
         verb=verb,
         step_name=step_name,

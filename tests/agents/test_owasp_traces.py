@@ -18,7 +18,6 @@ from kyvvu_engine.schemas import (
     Action,
     Behavior,
     EvalContext,
-    Scope,
     StepType,
     Verb,
 )
@@ -62,12 +61,10 @@ def _behavior(
     properties: dict | None = None,
 ) -> Behavior:
     """Build a minimal Behavior for evaluation."""
-    scope = Scope.task if step_type.value.startswith("task.") else Scope.step
     return Behavior(
         agent_id="owasp-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        scope=scope,
         step_type=step_type,
         verb=verb,
         step_name=step_name,
@@ -76,7 +73,7 @@ def _behavior(
 
 
 class TestRegistration:
-    """Registration-scope policies: substantive purpose + declared tool allowlist.
+    """Registration-time policies: substantive purpose + declared tool allowlist.
 
     Covers ``field_matches_regex`` (purpose must be >=30 chars) and
     ``field_not_empty`` (declared_tools must be present), both severity high.

@@ -50,8 +50,7 @@ policies:
         data.classification: secret
       target_step_types: ["step.exec"]
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "No network after secret read"
     description: |
       Block network access (WebFetch) after reading files classified as
@@ -69,8 +68,7 @@ policies:
       target_step_types: ["step.resource"]
       target_verb: GET
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # DESTRUCTIVE COMMAND PROTECTION
   # ==========================================================================
@@ -89,8 +87,7 @@ policies:
           field: exec.command
           pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?git\\s+push\\s+.*--force"
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # DESTRUCTIVE DELETE PROTECTION
   #
@@ -133,8 +130,7 @@ policies:
           field: exec.command
           pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*/(?:\\s|$|\\*)"
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "No recursive delete of home"
     description: |
       Block recursive rm targeting the home directory: rm -rf ~, ~/, $HOME,
@@ -147,8 +143,7 @@ policies:
           field: exec.command
           pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*(?:~|\\$HOME)/?(?:\\s|$)"
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "No recursive delete via parent traversal"
     description: |
       Block recursive rm that climbs out of the tree via parent refs:
@@ -162,8 +157,7 @@ policies:
           field: exec.command
           pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*\\.\\.(?:/\\.\\.)*/?(?:\\s|$)"
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "No recursive delete of system directories"
     description: |
       Block recursive rm into protected system paths (/etc, /bin, /lib, /boot,
@@ -179,8 +173,7 @@ policies:
           field: exec.command
           pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*/(?:etc|bin|sbin|lib|lib64|boot|sys|proc|dev|System|Library)(?:/|\\s|$)"
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "No git reset --hard"
     description: |
       Prevent git reset --hard which discards all uncommitted work.
@@ -193,8 +186,7 @@ policies:
           field: exec.command
           pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?git\\s+reset\\s+--hard"
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # SCOPE CONTAINMENT
   # ==========================================================================
@@ -226,8 +218,7 @@ policies:
       target_step_types: ["step.exec", "step.resource"]
       target_verbs: ["POST", "PATCH", "DELETE"]
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # --------------------------------------------------------------------------
   # SHELL WRITE / SECRET-READ STOPGAPS (#239 Layer A)
   #
@@ -265,8 +256,7 @@ policies:
           field: exec.command
           pattern: ".*(>>?|tee\\s+(-a\\s+)?|\\bcp\\s+|\\bmv\\s+|\\bdd\\b.*\\bof=|\\binstall\\s+).*(/etc/|/usr/|/var/|/System/|/Library/|/boot/|(~|\\$HOME)/\\.ssh|(~|\\$HOME)/\\.aws|/Users/[^/]+/\\.(ssh|aws)|/home/[^/]+/\\.(ssh|aws))"
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "No shell read of secret files"
     description: |
       Block shell reads of secret files (cat/less/head/tail/cp/xxd/base64/strings
@@ -280,8 +270,7 @@ policies:
           field: exec.command
           pattern: ".*\\b(cat|less|more|head|tail|cp|mv|xxd|base64|od|strings)\\b.*\\.(env|pem|key|secret|credentials|pgpass|netrc)(\\s|$|\"|')"
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # RUNAWAY PREVENTION
   # ==========================================================================
@@ -295,8 +284,7 @@ policies:
       step_type: step.exec
       max_steps: 50
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Max consecutive exec"
     description: |
       No more than 10 consecutive Bash calls without a file read or write
@@ -306,8 +294,7 @@ policies:
       step_type: step.exec
       max_consecutive: 10
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # PII SCANNING
   # ==========================================================================
@@ -325,4 +312,4 @@ policies:
         - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
         - "\\b\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}\\b"
     severity: critical
-    scope: step_execution
+    enforcement_point: step_execution

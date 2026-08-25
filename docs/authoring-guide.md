@@ -22,7 +22,7 @@ policies:
     params:
       <param_key>: <param_value>
     severity: <low|medium|high|critical>
-    scope: <agent_registration|step_execution>
+    enforcement_point: <agent_registration|step_execution>
 ```
 
 Optional per-policy fields: `risk_classification` (scopes the policy to a specific risk tier).
@@ -36,7 +36,7 @@ from kyvvu_engine.rules import PolicyRule
 
 rules = PolicyRule.get_all_rules()
 for name, meta in sorted(rules.items()):
-    print(f"{name}: scopes={meta['scopes']}")
+    print(f"{name}: enforcement_points={meta['enforcement_points']}")
     for k, v in meta["params_schema"].items():
         print(f"  {k}: type={v['type']}, required={v.get('required', False)}")
 ```
@@ -50,10 +50,10 @@ rules = PolicyRule.get_all_rules()
 print(rules["step_requires_gate"]["params_schema"])
 ```
 
-## Scopes
+## Enforcement points
 
-| Scope | When evaluated | Data available |
-|-------|---------------|----------------|
+| Enforcement point | When evaluated | Data available |
+|-------------------|---------------|----------------|
 | `agent_registration` | When an agent registers or updates | Agent profile fields: `name`, `purpose`, `risk_classification`, `owner_id`, `maintainer_id`, `declared_tools` |
 | `step_execution` | Before every agent action at runtime | Current step (`step_type`, `verb`, `step_name`, `properties`, `input`) plus full task history |
 

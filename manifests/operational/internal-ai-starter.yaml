@@ -32,8 +32,7 @@ policies:
     params:
       field: name
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must document its purpose"
     description: |
       Every agent must declare what it does. This is the minimum
@@ -42,8 +41,7 @@ policies:
     params:
       field: purpose
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must designate an owner"
     description: |
       Every agent must have an accountable owner. When something goes
@@ -52,8 +50,7 @@ policies:
     params:
       field: owner_id
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   # ==========================================================================
   # STEP EXECUTION
   # ==========================================================================
@@ -72,8 +69,7 @@ policies:
       agent_field: declared_tools
       target_step_types: ["step.resource", "step.exec", "step.credential"]
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Limit LLM calls per task"
     description: |
       Loop control: cap model inference calls at 50 per task to prevent
@@ -83,8 +79,7 @@ policies:
       step_type: step.model
       max_steps: 50
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Token budget per task"
     description: |
       Cost control: cap cumulative token usage at 100,000 tokens per
@@ -99,8 +94,7 @@ policies:
       property_path: usage.total_tokens
       budget: 100000
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Destructive operations require human approval"
     description: |
       DELETE operations on resources and code execution require a
@@ -112,8 +106,7 @@ policies:
       target_verb: DELETE
       gate_check_type: human_approval
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Prevent infinite LLM loops"
     description: |
       Block tasks where the agent calls the model more than 5 times
@@ -124,4 +117,4 @@ policies:
       step_type: step.model
       max_consecutive: 5
     severity: critical
-    scope: step_execution
+    enforcement_point: step_execution

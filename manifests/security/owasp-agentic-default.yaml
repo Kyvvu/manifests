@@ -73,8 +73,7 @@ policies:
       field: purpose
       pattern: "^.{30,}$"
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must declare a tool allowlist"
     description: |
       ASI02 (Tool Misuse), ASI04 (Supply Chain):
@@ -87,8 +86,7 @@ policies:
     params:
       field: declared_tools
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must declare a valid risk classification"
     description: |
       Enables classification-aware downstream policies and bridges to
@@ -101,8 +99,7 @@ policies:
       field: risk_classification
       values: ["high", "limited", "minimal"]
     severity: critical
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   # ==========================================================================
   # STEP EXECUTION - LEAST AGENCY ENFORCEMENT
   # ==========================================================================
@@ -123,8 +120,7 @@ policies:
       agent_field: declared_tools
       target_step_types: ["step.resource", "step.exec", "step.credential"]
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # STEP EXECUTION - HUMAN OVERSIGHT ON HIGH-IMPACT ACTIONS
   # ==========================================================================
@@ -144,8 +140,7 @@ policies:
     params:
       target_step_types: ["step.exec"]
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Destructive resource operations require a preceding gate"
     description: |
       ASI09 (Human-Agent Trust Exploitation):
@@ -160,8 +155,7 @@ policies:
       target_step_types: ["step.resource"]
       target_verb: DELETE
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # STEP EXECUTION - PATH-DEPENDENT TAINT ENFORCEMENT
   # ==========================================================================
@@ -239,8 +233,7 @@ policies:
                   params:
                     required_step_type: step.gate
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # STEP EXECUTION - RUNAWAY PREVENTION
   # ==========================================================================
@@ -265,4 +258,4 @@ policies:
       step_type: step.resource
       max_steps: 50
     severity: high
-    scope: step_execution
+    enforcement_point: step_execution

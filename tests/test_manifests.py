@@ -6,10 +6,10 @@ Every manifest in the library is automatically tested via the parametrized
 Tests cover:
 1. YAML parsing
 2. Required top-level fields (name, policies, version)
-3. Policy structure (name, rule_type, severity, scope)
-4. Severity and scope enum values
+3. Policy structure (name, rule_type, severity, enforcement_point)
+4. Severity and enforcement_point enum values
 5. Rule existence in kyvvu-engine registry
-6. Rule scope compatibility
+6. Rule enforcement_point compatibility
 7. Params schema validation (required keys present, no unknown keys)
 8. Recursive validation for compound rules (not, all_of, any_of)
 9. SPDX license header
@@ -26,7 +26,7 @@ from kyvvu_engine.rules import PolicyRule
 # ---------------------------------------------------------------------------
 
 VALID_SEVERITIES = {"low", "medium", "high", "critical"}
-VALID_SCOPES = {"agent_registration", "step_execution"}
+VALID_ENFORCEMENT_POINTS = {"agent_registration", "step_execution"}
 
 # Compound rule types whose params contain nested rule references.
 _SINGLE_CHILD_RULES = {"not"}  # params.condition
@@ -39,41 +39,43 @@ _MULTI_CHILD_RULES = {"all_of", "any_of"}  # params.conditions
 
 
 def _collect_rule_types(policy: dict[str, Any]) -> list[tuple[str, str]]:
-    """Recursively collect ``(rule_type, scope)`` from a policy and its children.
+    """Recursively collect ``(rule_type, enforcement_point)`` from a policy
+    and its children.
 
     Compound rules (``not``, ``all_of``, ``any_of``) embed nested rule
     references inside their ``params``.  This function walks the tree and
     returns every ``rule_type`` encountered together with the owning
-    policy's scope so that scope-compatibility checks can be applied.
+    policy's enforcement point so that enforcement-point compatibility
+    checks can be applied.
 
     Returns:
-        List of ``(rule_type, scope)`` tuples.
+        List of ``(rule_type, enforcement_point)`` tuples.
     """
     results: list[tuple[str, str]] = []
-    _walk(policy, policy.get("scope", "step_execution"), results)
+    _walk(policy, policy.get("enforcement_point", "step_execution"), results)
     return results
 
 
 def _walk(
     node: dict[str, Any],
-    scope: str,
+    enforcement_point: str,
     acc: list[tuple[str, str]],
 ) -> None:
     """Depth-first walk of a policy / sub-condition node."""
     rt = node.get("rule_type", "")
     if rt:
-        acc.append((rt, scope))
+        acc.append((rt, enforcement_point))
 
     params = node.get("params", {})
 
     # Single-child compound rules: not → params.condition
     if rt in _SINGLE_CHILD_RULES and "condition" in params:
-        _walk(params["condition"], scope, acc)
+        _walk(params["condition"], enforcement_point, acc)
 
     # Multi-child compound rules: all_of / any_of → params.conditions
     if rt in _MULTI_CHILD_RULES and "conditions" in params:
         for child in params["conditions"]:
-            _walk(child, scope, acc)
+            _walk(child, enforcement_point, acc)
 
 
 def _collect_leaf_params(policy: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
@@ -138,7 +140,7 @@ class TestPolicyStructure:
     """Every policy must have the required structural fields."""
 
     def test_policy_has_required_fields(self, manifest_data: dict[str, Any]) -> None:
-        required = {"name", "rule_type", "severity", "scope"}
+        required = {"name", "rule_type", "severity", "enforcement_point"}
         for i, policy in enumerate(manifest_data["policies"]):
             missing = required - set(policy.keys())
             assert not missing, (
@@ -158,14 +160,15 @@ class TestSeverityValues:
             )
 
 
-class TestScopeValues:
-    """Policy scope must be one of agent_registration, step_execution."""
+class TestEnforcementPointValues:
+    """Policy enforcement_point must be agent_registration or step_execution."""
 
-    def test_valid_scope(self, manifest_data: dict[str, Any]) -> None:
+    def test_valid_enforcement_point(self, manifest_data: dict[str, Any]) -> None:
         for policy in manifest_data["policies"]:
-            assert policy["scope"] in VALID_SCOPES, (
-                f"Policy '{policy['name']}' has invalid scope: "
-                f"{policy['scope']!r}. Must be one of {VALID_SCOPES}"
+            assert policy["enforcement_point"] in VALID_ENFORCEMENT_POINTS, (
+                f"Policy '{policy['name']}' has invalid enforcement_point: "
+                f"{policy['enforcement_point']!r}. Must be one of "
+                f"{VALID_ENFORCEMENT_POINTS}"
             )
 
 
@@ -175,26 +178,33 @@ class TestRuleExistence:
     def test_all_rule_types_exist(self, manifest_data: dict[str, Any]) -> None:
         all_rules = PolicyRule.get_all_rules()
         for policy in manifest_data["policies"]:
-            for rule_type, _scope in _collect_rule_types(policy):
+            for rule_type, _ep in _collect_rule_types(policy):
                 assert rule_type in all_rules, (
                     f"Policy '{policy['name']}' references unknown rule_type: "
                     f"{rule_type!r}. Available: {sorted(all_rules.keys())}"
                 )
 
 
-class TestRuleScopeMatch:
-    """Each policy's scope must be in the rule's supported scopes list."""
+class TestRuleEnforcementPointMatch:
+    """Each policy's enforcement_point must be in the rule's supported list.
 
-    def test_scope_in_rule_scopes(self, manifest_data: dict[str, Any]) -> None:
+    ``enforcement_points`` here is the kyvvu-engine rule-registry metadata
+    key, renamed alongside the platform rename.
+    """
+
+    def test_enforcement_point_in_supported_list(
+        self, manifest_data: dict[str, Any]
+    ) -> None:
         all_rules = PolicyRule.get_all_rules()
         for policy in manifest_data["policies"]:
-            for rule_type, scope in _collect_rule_types(policy):
+            for rule_type, enforcement_point in _collect_rule_types(policy):
                 if rule_type not in all_rules:
                     continue  # Already caught by TestRuleExistence
-                rule_scopes = all_rules[rule_type].get("scopes", [])
-                assert scope in rule_scopes, (
+                supported = all_rules[rule_type].get("enforcement_points", [])
+                assert enforcement_point in supported, (
                     f"Policy '{policy['name']}' uses rule_type={rule_type!r} "
-                    f"with scope={scope!r}, but rule only supports: {rule_scopes}"
+                    f"with enforcement_point={enforcement_point!r}, but rule "
+                    f"only supports: {supported}"
                 )
 
 

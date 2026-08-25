@@ -41,8 +41,7 @@ policies:
     params:
       field: purpose
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must designate a responsible owner"
     description: |
       HIPAA 45 CFR 164.530(a)(1) — Covered entities must designate a
@@ -52,8 +51,7 @@ policies:
     params:
       field: owner_id
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Healthcare agents must be classified as high risk"
     description: |
       NEN 7510 clause 5.2 — Risk assessment: AI agents processing PHI
@@ -64,8 +62,7 @@ policies:
       field: risk_classification
       values: ["high"]
     severity: critical
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   # ==========================================================================
   # STEP EXECUTION
   # ==========================================================================
@@ -86,8 +83,7 @@ policies:
         - "\\b\\d{9}\\b"
         - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Restrict data access to approved healthcare domains"
     description: |
       NEN 7510 clause 13.1 — Network security management: restrict
@@ -100,8 +96,7 @@ policies:
     params:
       allowed_domains: ["ehr.example.com", "fhir.example.com"]
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "PHI access requires patient consent gate"
     description: |
       HIPAA 45 CFR 164.508 — Uses and disclosures for which an
@@ -113,8 +108,7 @@ policies:
       target_step_types: ["step.resource"]
       gate_check_type: patient_consent
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Code execution is forbidden for healthcare agents"
     description: |
       NEN 7510 clause 12.2 — Protection from malware: arbitrary code
@@ -126,4 +120,4 @@ policies:
       forbidden_step_type: step.exec
       agent_risk_classifications: ["high"]
     severity: critical
-    scope: step_execution
+    enforcement_point: step_execution

@@ -38,8 +38,7 @@ policies:
     params:
       field: purpose
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must have an identifying name"
     description: |
       EU AI Act Article 13 requires that AI systems be clearly identifiable.
@@ -51,8 +50,7 @@ policies:
     params:
       field: name
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Risk classification must be valid"
     description: |
       EU AI Act Article 6 requires AI systems to be classified by risk level.
@@ -65,8 +63,7 @@ policies:
       field: risk_classification
       values: ["high", "limited", "minimal"]
     severity: critical
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must have a designated owner"
     description: |
       EU AI Act Article 16 establishes provider obligations including
@@ -78,8 +75,7 @@ policies:
     params:
       field: owner_id
     severity: medium
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent purpose must be substantive"
     description: |
       EU AI Act Article 11 requires detailed technical documentation.
@@ -92,8 +88,7 @@ policies:
       field: purpose
       pattern: "^.{20,}$"
     severity: medium
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   # ==========================================================================
   # STEP EXECUTION - ARTICLE 50 TRANSPARENCY OBLIGATIONS
   # ==========================================================================
@@ -112,8 +107,7 @@ policies:
       required_step_type: step.gate
       target_step_types: ["step.model"]
     severity: high
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Chatbot disclosure gate required before outbound messages"
     description: |
       EU AI Act Article 50(1) requires that natural persons be informed
@@ -127,4 +121,4 @@ policies:
       target_step_types: ["step.message"]
       target_verb: POST
     severity: high
-    scope: step_execution
+    enforcement_point: step_execution

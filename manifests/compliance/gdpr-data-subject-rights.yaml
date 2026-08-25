@@ -32,8 +32,7 @@ policies:
     params:
       field: purpose
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must designate a DSR response contact"
     description: |
       GDPR Article 13(1)(a) — The identity and contact details of the
@@ -43,8 +42,7 @@ policies:
     params:
       field: maintainer_id
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent processing purpose must be substantive"
     description: |
       GDPR Article 5(1)(c) — Data minimization: personal data must be
@@ -56,8 +54,7 @@ policies:
       field: purpose
       pattern: "^.{30,}$"
     severity: medium
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   # ==========================================================================
   # STEP EXECUTION
   # ==========================================================================
@@ -74,8 +71,7 @@ policies:
       target_verb: DELETE
       gate_check_type: erasure_approval
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Automated decisions on personal data require consent gate"
     description: |
       GDPR Article 22 — The data subject has the right not to be subject
@@ -89,8 +85,7 @@ policies:
       target_step_types: ["step.model"]
       gate_check_type: data_subject_consent
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Limit resource access scope per task"
     description: |
       GDPR Article 5(1)(c) — Data minimization: restrict the volume of
@@ -101,4 +96,4 @@ policies:
       step_type: step.resource
       max_steps: 30
     severity: high
-    scope: step_execution
+    enforcement_point: step_execution

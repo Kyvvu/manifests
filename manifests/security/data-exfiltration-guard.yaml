@@ -56,8 +56,7 @@ policies:
       target_step_types: ["step.message", "step.resource"]
       target_verb: POST
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # LAYER 2: STRUCTURAL GATE
   # ==========================================================================
@@ -73,8 +72,7 @@ policies:
       target_step_types: ["step.message"]
       gate_check_type: exfiltration_review
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # LAYER 3: NETWORK BOUNDARY
   # ==========================================================================
@@ -90,8 +88,7 @@ policies:
     params:
       allowed_domains: ["internal.example.com", "api.example.com"]
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # LAYER 4: CONTENT INSPECTION
   # ==========================================================================
@@ -111,8 +108,7 @@ policies:
         - "\\b\\d{9}\\b"
         - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   # ==========================================================================
   # LAYER 5: SEQUENCE PROHIBITION
   # ==========================================================================
@@ -127,4 +123,4 @@ policies:
     params:
       forbidden_sequence: ["step.credential", "step.message"]
     severity: critical
-    scope: step_execution
+    enforcement_point: step_execution
