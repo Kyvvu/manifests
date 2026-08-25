@@ -24,7 +24,6 @@ from kyvvu_engine.schemas import (
     Action,
     Behavior,
     EvalContext,
-    Scope,
     StepType,
     Verb,
 )
@@ -53,12 +52,10 @@ def make_behavior(
     properties: dict | None = None,
 ) -> Behavior:
     """Build a minimal Behavior."""
-    scope = Scope.task if step_type.value.startswith("task.") else Scope.step
     return Behavior(
         agent_id="demo-agent",
         task_id="task-1",
         timestamp=datetime.now(timezone.utc),
-        scope=scope,
         step_type=step_type,
         verb=verb,
         step_name=step_name,

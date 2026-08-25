@@ -17,7 +17,6 @@ from kyvvu_engine.schemas import (
     Action,
     Behavior,
     EvalContext,
-    Scope,
     StepType,
     Verb,
 )
@@ -57,12 +56,10 @@ def _behavior(
     properties: dict | None = None,
 ) -> Behavior:
     """Build a minimal Behavior for evaluation."""
-    scope = Scope.task if step_type.value.startswith("task.") else Scope.step
     return Behavior(
         agent_id="high-risk-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        scope=scope,
         step_type=step_type,
         verb=verb,
         step_name=step_name,
@@ -71,7 +68,7 @@ def _behavior(
 
 
 class TestRegistration:
-    """Registration-scope policies for high-risk agents."""
+    """Registration-time policies for high-risk agents."""
 
     def test_compliant_high_risk_registration(self, policies: list[dict]) -> None:
         """HIGH risk agent with all required fields passes."""

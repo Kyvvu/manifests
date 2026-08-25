@@ -35,8 +35,7 @@ policies:
     params:
       field: purpose
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must designate a responsible owner"
     description: |
       DORA Article 5(2) — The management body shall define, approve, and
@@ -46,8 +45,7 @@ policies:
     params:
       field: owner_id
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must designate a maintainer"
     description: |
       DORA Article 6 — ICT systems must have clear assignment of
@@ -57,8 +55,7 @@ policies:
     params:
       field: maintainer_id
     severity: medium
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Financial agents must be high or limited risk"
     description: |
       MiFID II Article 16 — Organisational requirements: investment firms
@@ -70,8 +67,7 @@ policies:
       field: risk_classification
       values: ["high", "limited"]
     severity: critical
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   # ==========================================================================
   # STEP EXECUTION
   # ==========================================================================
@@ -89,8 +85,7 @@ policies:
       target_verb: POST
       gate_check_type: human_approval
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Market data read taints downstream trade execution"
     description: |
       DORA Article 9 — ICT risk management: once market data is read
@@ -115,8 +110,7 @@ policies:
       target_step_types: ["step.resource"]
       target_verb: POST
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "No LLM call between approval and trade execution"
     description: |
       MiFID II Article 27 — Approval integrity: once a human approves a
@@ -131,8 +125,7 @@ policies:
       target_step_types: ["step.resource"]
       target_verb: POST
     severity: critical
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Limit LLM calls per task"
     description: |
       DORA Article 9 — Risk controls: limit the number of model inference
@@ -143,8 +136,7 @@ policies:
       step_type: step.model
       max_steps: 20
     severity: high
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Restrict execution to market hours"
     description: |
       MiFID II Article 48 — Trading venue requirements: algorithmic
@@ -159,4 +151,4 @@ policies:
       end_hour: 18
       timezone: "Europe/Amsterdam"
     severity: critical
-    scope: step_execution
+    enforcement_point: step_execution

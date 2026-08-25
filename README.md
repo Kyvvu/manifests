@@ -4,8 +4,8 @@ A manifest is a YAML bundle of policies — security, safety, and compliance —
 
 ## Manifests
 
-| Manifest | Directory | Scope | Basis |
-|----------|-----------|-------|-------|
+| Manifest | Directory | Enforcement points | Basis |
+|----------|-----------|--------------------|-------|
 | `eu-ai-act-minimal` | `compliance/` | Registration + Step | EU AI Act Art. 6, 13, 50 |
 | `eu-ai-act-high-risk` | `compliance/` | Registration + Step | EU AI Act Art. 6-15 |
 | `gdpr-data-subject-rights` | `compliance/` | Registration + Step | GDPR Art. 5, 13, 17, 22 |
@@ -52,7 +52,7 @@ policies:
     params:
       field: purpose
     severity: high
-    scope: agent_registration
+    enforcement_point: agent_registration
 
   # Runtime step check
   - name: "DELETE requires human approval"
@@ -64,10 +64,10 @@ policies:
       target_verb: DELETE
       gate_check_type: human_approval
     severity: critical
-    scope: step_execution
+    enforcement_point: step_execution
 ```
 
-**Scopes**: `agent_registration` policies evaluate when an agent registers. `step_execution` policies evaluate before every agent action at runtime.
+**Enforcement points**: `agent_registration` policies evaluate when an agent registers. `step_execution` policies evaluate before every agent action at runtime.
 
 **Severity levels**: `critical` triggers a **block** (the action is prevented). `high`, `medium`, and `low` trigger a **warn** (the violation is logged but the action proceeds).
 

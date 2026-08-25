@@ -4,7 +4,7 @@
 #
 # Minimal manifest for quickstart tutorials and integration tests. Contains
 # one registration policy and one step-execution policy to demonstrate the
-# two evaluation scopes.
+# two enforcement points.
 #
 # This is NOT a production manifest. Use the compliance/ and security/
 # manifests for real deployments.
@@ -22,21 +22,20 @@ policies:
     description: |
       All agents must have a documented purpose. This is the simplest
       registration-time policy and demonstrates the agent_registration
-      evaluation scope.
+      enforcement point.
     rule_type: field_not_empty
     params:
       field: purpose
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Max LLM calls per task"
     description: |
       Guard-rail limiting the total number of step.model (LLM inference)
       calls within a single task execution. Set to 10 for demo purposes.
-      Demonstrates the step_execution evaluation scope.
+      Demonstrates the step_execution enforcement point.
     rule_type: execution_max_steps
     params:
       step_type: step.model
       max_steps: 10
     severity: critical
-    scope: step_execution
+    enforcement_point: step_execution

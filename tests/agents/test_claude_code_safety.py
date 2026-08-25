@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from kyvvu_engine import PolicyEngine
-from kyvvu_engine.schemas import Action, Behavior, EvalContext, Scope, StepType, Verb
+from kyvvu_engine.schemas import Action, Behavior, EvalContext, StepType, Verb
 
 
 @pytest.fixture(scope="module")
@@ -44,12 +44,10 @@ def _behavior(
     step: int = 1,
     input_data: dict | None = None,
 ) -> Behavior:
-    scope = Scope.task if step_type.value.startswith("task.") else Scope.step
     return Behavior(
         agent_id="test",
         task_id=task_id,
         step=step,
-        scope=scope,
         step_type=step_type,
         verb=verb,
         step_name=step_name,

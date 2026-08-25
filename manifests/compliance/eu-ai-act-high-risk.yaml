@@ -42,8 +42,7 @@ policies:
     params:
       field: risk_classification
     severity: critical
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Risk classification must be valid"
     description: |
       EU AI Act Article 6: validates that risk classification uses only
@@ -56,8 +55,7 @@ policies:
       field: risk_classification
       values: ["high", "limited", "minimal"]
     severity: critical
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must have a documented purpose"
     description: |
       EU AI Act Articles 11 and 13 require clear documentation of AI system
@@ -69,8 +67,7 @@ policies:
     params:
       field: purpose
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must have an identifying name"
     description: |
       EU AI Act Article 13 requires that AI systems be clearly identifiable.
@@ -82,8 +79,7 @@ policies:
     params:
       field: name
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   - name: "Agent must have a designated owner"
     description: |
       EU AI Act Article 16 establishes provider obligations including
@@ -95,8 +91,7 @@ policies:
     params:
       field: owner_id
     severity: high
-    scope: agent_registration
-
+    enforcement_point: agent_registration
   # ==========================================================================
   # AGENT REGISTRATION - HIGH RISK ENHANCED DOCUMENTATION
   # ==========================================================================
@@ -114,7 +109,7 @@ policies:
       field: purpose
       pattern: "^.{50,}$"
     severity: high
-    scope: agent_registration
+    enforcement_point: agent_registration
     risk_classification: high
 
   - name: "HIGH risk agents must have a designated maintainer"
@@ -129,7 +124,7 @@ policies:
     params:
       field: maintainer_id
     severity: medium
-    scope: agent_registration
+    enforcement_point: agent_registration
     risk_classification: high
 
   # ==========================================================================
@@ -150,7 +145,7 @@ policies:
       target_verb: POST
       gate_check_type: human_approval
     severity: critical
-    scope: step_execution
+    enforcement_point: step_execution
     risk_classification: high
 
   - name: "HIGH risk - Destructive operations require human approval"
@@ -166,7 +161,7 @@ policies:
       target_verb: DELETE
       gate_check_type: human_approval
     severity: critical
-    scope: step_execution
+    enforcement_point: step_execution
     risk_classification: high
 
   # ==========================================================================
@@ -186,7 +181,7 @@ policies:
       required_step_type: step.gate
       target_step_types: ["step.model"]
     severity: high
-    scope: step_execution
+    enforcement_point: step_execution
     risk_classification: high
 
   # ==========================================================================
@@ -206,8 +201,7 @@ policies:
       step_type: step.resource
       max_steps: 50
     severity: high
-    scope: step_execution
-
+    enforcement_point: step_execution
   - name: "Limit model calls per task for robustness"
     description: |
       EU AI Act Article 15(1) requires appropriate levels of accuracy and
@@ -220,4 +214,4 @@ policies:
       step_type: step.model
       max_steps: 30
     severity: high
-    scope: step_execution
+    enforcement_point: step_execution
