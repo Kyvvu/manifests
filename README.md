@@ -91,6 +91,23 @@ Path-dependent rules available in the engine:
 | `execution_max_steps` | Caps the count of a step type within a task |
 | `max_consecutive_same_type` | Limits consecutive occurrences of a step type |
 
+## How this repository is maintained
+
+This repository is **generated output**. It mirrors the `kyvvu-manifests-public/`
+directory of Kyvvu's private `platform` repository, and every sync replaces the
+whole tree — `git rm -rf .`, then an rsync — excluding only `.git/` and
+`.github/workflows/`.
+
+So anything committed here directly is deleted at the next sync. That includes a
+merged pull request, and it has already happened once: a `.gitignore` added here
+was gone minutes later and had to be added to the upstream copy instead.
+
+Pull requests are still the way to contribute — `platform` is private, so there
+is nowhere else to send one. A maintainer vendors the merged change upstream, and
+the next sync carries it back. Until that back-port lands, though, the change is
+one sync away from disappearing, so treat a merge here as accepted rather than
+as shipped. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Authoring and contributing
 
 See [docs/authoring-guide.md](docs/authoring-guide.md) for how to write a manifest and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.

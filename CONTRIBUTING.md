@@ -10,6 +10,14 @@ Thank you for your interest in contributing to the Kyvvu manifest library!
 
 ## Manifest authoring workflow
 
+This repository is a mirror of a directory in Kyvvu's private `platform`
+repository, and each sync replaces its whole contents — see
+[How this repository is maintained](README.md#how-this-repository-is-maintained).
+Send your pull request here anyway; that is the contribution path. Just know
+that merging it is not the end: a maintainer copies the change upstream, and
+until they do, the next sync will revert it. Never commit straight to `main`
+here — that change has no upstream copy at all and simply vanishes.
+
 1. Fork the repository and create a feature branch.
 2. Write your manifest YAML in the appropriate subdirectory (`manifests/compliance/`,
    `manifests/security/`, or `manifests/operational/`).
