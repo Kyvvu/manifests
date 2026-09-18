@@ -28,7 +28,7 @@ python exfiltration_demo.py
 
 To assign a manifest to a live agent, use the Kyvvu dashboard or API:
 
-1. Connect a manifest repository under **Settings > Repos**.
+1. Connect a manifest repository from **Manifests → Add Repository**.
 2. Navigate to **Agents > Manifests** and assign a manifest file to the agent.
 3. The engine evaluates every agent step against the manifest's policies.
 
