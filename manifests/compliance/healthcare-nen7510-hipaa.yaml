@@ -95,6 +95,7 @@ policies:
     rule_type: domain_allowlist
     params:
       allowed_domains: ["ehr.example.com", "fhir.example.com"]
+      target_step_types: ["step.resource"]
     severity: critical
     enforcement_point: step_execution
   - name: "PHI access requires patient consent gate"

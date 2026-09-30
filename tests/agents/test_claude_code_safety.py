@@ -111,8 +111,8 @@ class TestDestructiveCommandProtection:
         assert result.action == Action.block
 
     def test_chained_and_prefixed_commands_blocked(self, policies: list[dict]) -> None:
-        # The engine matches start-anchored (re.match); the command-position
-        # prefix must catch dangerous commands that are not the first token.
+        # The engine searches (re.search) and the patterns start with ^; the
+        # command-position prefix must catch dangerous commands that are not the first token.
         engine = PolicyEngine()
         engine.load_policies(policies)
         for cmd in ("cd repo && git push --force", "sudo rm -rf /", "build; git reset --hard"):
@@ -124,6 +124,21 @@ class TestDestructiveCommandProtection:
                 _ctx(),
             )
             assert result.action == Action.block, f"should block: {cmd!r}"
+
+    def test_dangerous_text_as_an_argument_is_allowed(self, policies: list[dict]) -> None:
+        # The patterns are searched, so the leading ^ is what keeps a command
+        # that merely mentions a dangerous one (as an argument) from blocking.
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        for cmd in ('echo "rm -rf /"', "echo git reset --hard", "echo git push --force"):
+            result = engine.evaluate(
+                _behavior(
+                    StepType.step_exec,
+                    properties={"exec": {"command": cmd}},
+                ),
+                _ctx(),
+            )
+            assert result.action == Action.allow, f"should allow: {cmd!r}"
 
     def test_normal_push_allowed(self, policies: list[dict]) -> None:
         engine = PolicyEngine()

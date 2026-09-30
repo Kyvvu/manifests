@@ -14,8 +14,8 @@ Both mirror the destructive-delete pattern (``not`` over ``field_matches_regex``
 on ``exec.command``) and use the existing engine rule — no new rule functions.
 
 The patterns are exercised exactly as the engine evaluates them: the
-``field_matches_regex`` rule uses ``re.match(pattern, text, re.DOTALL)``
-(see ``kyvvu_engine/rules/field.py``), so each pattern begins with ``.*`` to
+``field_matches_regex`` rule uses ``re.search(pattern, text, re.DOTALL)``
+(see ``kyvvu_engine/rules/field.py``), so each pattern begins with ``^.*`` to
 find the write operator / read command anywhere in the command line.
 
 HONEST LIMITS (regex on an opaque shell string cannot catch these — they need
@@ -82,12 +82,12 @@ _SECRET_PATTERN = _SHELL_PATTERNS.get("No shell read of secret files", "")
 
 def _write_blocked(command: str) -> bool:
     """True if the shell-write pattern matches, mirroring the engine."""
-    return bool(_WRITE_PATTERN) and bool(re.match(_WRITE_PATTERN, command, re.DOTALL))
+    return bool(_WRITE_PATTERN) and bool(re.search(_WRITE_PATTERN, command, re.DOTALL))
 
 
 def _secret_blocked(command: str) -> bool:
     """True if the secret-read pattern matches, mirroring the engine."""
-    return bool(_SECRET_PATTERN) and bool(re.match(_SECRET_PATTERN, command, re.DOTALL))
+    return bool(_SECRET_PATTERN) and bool(re.search(_SECRET_PATTERN, command, re.DOTALL))
 
 
 # ---------------------------------------------------------------------------

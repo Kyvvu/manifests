@@ -219,6 +219,38 @@ class TestDomainAllowlist:
             for p in result.policies
         )
 
+    def test_violating_resource_call_with_no_host(self, policies: list[dict]) -> None:
+        """A resource call that names no destination is blocked (#577)."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(StepType.step_resource, Verb.GET, step_name="read_unknown"),
+            _ctx(),
+        )
+        assert any(
+            p.violated and p.rule_type == "domain_allowlist"
+            for p in result.policies
+        )
+
+    def test_compliant_url_form_of_allowlisted_host(self, policies: list[dict]) -> None:
+        """A full URL on an approved host passes the domain allowlist (#577)."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        host = "https://api.example.com/v1"
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_resource,
+                Verb.GET,
+                step_name="fetch_internal",
+                properties={"target": {"host": host}},
+            ),
+            _ctx(),
+        )
+        assert not any(
+            p.violated and p.rule_type == "domain_allowlist"
+            for p in result.policies
+        )
+
 
 class TestPiiInPayload:
     """Layer 4: outbound payloads scanned for PII patterns."""

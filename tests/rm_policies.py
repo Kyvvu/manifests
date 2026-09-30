@@ -8,7 +8,7 @@ fail in two directions at once — too strict on safe paths, too loose on
 dangerous ones — so this fixture pins both directions with explicit cases.
 
 The patterns are exercised exactly as the engine evaluates them: the
-``field_matches_regex`` rule uses ``re.match(pattern, text, re.DOTALL)``
+``field_matches_regex`` rule uses ``re.search(pattern, text, re.DOTALL)``
 (see ``kyvvu_engine/rules/field.py``). A command is "blocked" if ANY of the
 four destructive-delete patterns matches.
 
@@ -69,7 +69,7 @@ _RM_PATTERNS = _load_rm_patterns()
 
 def _is_blocked(command: str) -> bool:
     """True if any destructive-delete pattern matches, mirroring the engine."""
-    return any(re.match(pat, command, re.DOTALL) for _name, pat in _RM_PATTERNS)
+    return any(re.search(pat, command, re.DOTALL) for _name, pat in _RM_PATTERNS)
 
 
 # ---------------------------------------------------------------------------
@@ -111,8 +111,8 @@ MUST_BLOCK = [
     "rm -rf /Library",
     "rm -rf /etc/",
     "rm -rf /etc/nginx",
-    # Prefixed / chained command positions. The engine matches with re.match
-    # (start-anchored), so the command-position prefix is what catches an rm
+    # Prefixed / chained command positions. The engine searches and each pattern
+    # starts with ^, so the command-position prefix is what catches an rm
     # that is not the first token: after sudo/exec-wrappers, or after a
     # command separator (; && || |).
     "sudo rm -rf /",
@@ -153,6 +153,8 @@ MUST_PASS = [
     "echo rm -rf /",
     'printf "rm -rf /"',
     "confirm -rf /tmp/x",
+    'echo "rm -rf /"',
+    "echo git reset --hard",
 ]
 
 

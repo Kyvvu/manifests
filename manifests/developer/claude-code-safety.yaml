@@ -85,7 +85,7 @@ policies:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?git\\s+push\\s+.*--force"
+          pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?git\\s+push\\s+.*--force"
     severity: critical
     enforcement_point: step_execution
   # ==========================================================================
@@ -103,9 +103,10 @@ policies:
   #      -[\w]*r[\w]*f[\w]* required r-before-f and missed -fr and split flags.)
   #   3. Targets are anchored so SCOPED paths are allowed: `rm -rf /tmp/x` and
   #      `rm -rf ~/project/build` pass; only root, home, and parent-climb block.
-  #   4. Command-position prefix: the engine matches start-anchored (re.match),
-  #      so each pattern allows a leading command separator (; && || |) or a
-  #      known exec-wrapper (sudo/doas/env/xargs/time/nice) before `rm`. This
+  #   4. Command-position prefix: the engine searches (re.search) and each
+  #      pattern starts with `^`, so each pattern allows a leading command
+  #      separator (; && || |) or a known exec-wrapper
+  #      (sudo/doas/env/xargs/time/nice) before `rm`. This
   #      catches `sudo rm -rf /` and `cd x && rm -rf /`, while `echo rm -rf /`
   #      (rm as an argument, not executed) correctly passes.
   #
@@ -128,7 +129,7 @@ policies:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*/(?:\\s|$|\\*)"
+          pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*/(?:\\s|$|\\*)"
     severity: critical
     enforcement_point: step_execution
   - name: "No recursive delete of home"
@@ -141,7 +142,7 @@ policies:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*(?:~|\\$HOME)/?(?:\\s|$)"
+          pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*(?:~|\\$HOME)/?(?:\\s|$)"
     severity: critical
     enforcement_point: step_execution
   - name: "No recursive delete via parent traversal"
@@ -155,7 +156,7 @@ policies:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*\\.\\.(?:/\\.\\.)*/?(?:\\s|$)"
+          pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*\\.\\.(?:/\\.\\.)*/?(?:\\s|$)"
     severity: critical
     enforcement_point: step_execution
   - name: "No recursive delete of system directories"
@@ -171,7 +172,7 @@ policies:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*/(?:etc|bin|sbin|lib|lib64|boot|sys|proc|dev|System|Library)(?:/|\\s|$)"
+          pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*/(?:etc|bin|sbin|lib|lib64|boot|sys|proc|dev|System|Library)(?:/|\\s|$)"
     severity: critical
     enforcement_point: step_execution
   - name: "No git reset --hard"
@@ -184,7 +185,7 @@ policies:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: "(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?git\\s+reset\\s+--hard"
+          pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?git\\s+reset\\s+--hard"
     severity: critical
     enforcement_point: step_execution
   # ==========================================================================
@@ -228,8 +229,10 @@ policies:
   # on the command string. They mirror the destructive-delete pattern (`not` over
   # `field_matches_regex` on exec.command) and use only the existing engine rule.
   #
-  # The engine evaluates field_matches_regex with re.match (start-anchored), so
-  # both patterns begin with `.*` to find the operator anywhere in the command.
+  # The engine evaluates field_matches_regex with re.search (a pattern matches
+  # anywhere in the value), so every exec.command pattern in this file starts
+  # with an explicit `^`: the operator must be in command position, and the two
+  # patterns below then use `.*` to find it anywhere after the start.
   #
   # HONEST LIMIT (regex on an opaque shell string cannot catch these — they need
   # a command parser and are out of scope; documented, not pretended):
@@ -254,7 +257,7 @@ policies:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: ".*(>>?|tee\\s+(-a\\s+)?|\\bcp\\s+|\\bmv\\s+|\\bdd\\b.*\\bof=|\\binstall\\s+).*(/etc/|/usr/|/var/|/System/|/Library/|/boot/|(~|\\$HOME)/\\.ssh|(~|\\$HOME)/\\.aws|/Users/[^/]+/\\.(ssh|aws)|/home/[^/]+/\\.(ssh|aws))"
+          pattern: "^.*(>>?|tee\\s+(-a\\s+)?|\\bcp\\s+|\\bmv\\s+|\\bdd\\b.*\\bof=|\\binstall\\s+).*(/etc/|/usr/|/var/|/System/|/Library/|/boot/|(~|\\$HOME)/\\.ssh|(~|\\$HOME)/\\.aws|/Users/[^/]+/\\.(ssh|aws)|/home/[^/]+/\\.(ssh|aws))"
     severity: critical
     enforcement_point: step_execution
   - name: "No shell read of secret files"
@@ -268,7 +271,7 @@ policies:
         rule_type: field_matches_regex
         params:
           field: exec.command
-          pattern: ".*\\b(cat|less|more|head|tail|cp|mv|xxd|base64|od|strings)\\b.*\\.(env|pem|key|secret|credentials|pgpass|netrc)(\\s|$|\"|')"
+          pattern: "^.*\\b(cat|less|more|head|tail|cp|mv|xxd|base64|od|strings)\\b.*\\.(env|pem|key|secret|credentials|pgpass|netrc)(\\s|$|\"|')"
     severity: critical
     enforcement_point: step_execution
   # ==========================================================================
