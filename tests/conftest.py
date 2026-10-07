@@ -17,6 +17,13 @@ import yaml
 MANIFESTS_DIR = os.path.join(os.path.dirname(__file__), "..", "manifests")
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "covers_policy(name, ..., violated=True): assert named policy outcomes in a trace",
+    )
+
+
 def all_manifest_paths() -> list[str]:
     """Return sorted list of all manifest YAML paths under ``manifests/``."""
     return sorted(glob.glob(os.path.join(MANIFESTS_DIR, "**/*.yaml"), recursive=True))

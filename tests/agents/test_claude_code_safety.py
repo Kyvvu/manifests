@@ -11,17 +11,18 @@ import yaml
 from kyvvu_engine import PolicyEngine
 from kyvvu_engine.schemas import Action, Behavior, EvalContext, StepType, Verb
 
+MANIFEST_PATH = (
+    Path(__file__).parent.parent.parent
+    / "manifests"
+    / "developer"
+    / "claude-code-safety.yaml"
+)
+
 
 @pytest.fixture(scope="module")
 def policies() -> list[dict]:
     """Load policy dicts from the Claude Code safety manifest."""
-    path = (
-        Path(__file__).parent.parent.parent
-        / "manifests"
-        / "developer"
-        / "claude-code-safety.yaml"
-    )
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(MANIFEST_PATH.read_text())
     return [{**p, "id": i + 1, "enabled": True} for i, p in enumerate(data["policies"])]
 
 
@@ -72,6 +73,23 @@ class TestDestructiveCommandProtection:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy("No shell read of secret files")
+    def test_shell_read_of_secret_file_blocked(self, policies: list[dict]) -> None:
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(
+                StepType.step_exec,
+                properties={"exec": {"command": "cat secrets.env"}},
+            ),
+            _ctx(),
+        )
+        assert any(
+            p.name == "No shell read of secret files" and p.violated
+            for p in result.policies
+        )
+
+    @pytest.mark.covers_policy('No force push')
     def test_force_push_blocked(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -86,6 +104,7 @@ class TestDestructiveCommandProtection:
         violated_names = [p.name for p in result.policies if p.violated]
         assert "No force push" in violated_names
 
+    @pytest.mark.covers_policy('No recursive delete of root')
     def test_rm_rf_root_blocked(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -98,6 +117,27 @@ class TestDestructiveCommandProtection:
         )
         assert result.action == Action.block
 
+    @pytest.mark.covers_policy(
+        "No recursive delete of home",
+        "No recursive delete via parent traversal",
+        "No recursive delete of system directories",
+    )
+    def test_other_recursive_delete_targets_blocked(self, policies: list[dict]) -> None:
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        cases = (
+            ("rm -rf ~", "No recursive delete of home"),
+            ("rm -rf ../..", "No recursive delete via parent traversal"),
+            ("rm -rf /etc", "No recursive delete of system directories"),
+        )
+        for command, name in cases:
+            result = engine.evaluate(
+                _behavior(StepType.step_exec, properties={"exec": {"command": command}}),
+                _ctx(),
+            )
+            assert any(p.name == name and p.violated for p in result.policies), command
+
+    @pytest.mark.covers_policy('No git reset --hard')
     def test_git_reset_hard_blocked(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -168,6 +208,7 @@ class TestScopeContainment:
     def _rooted_ctx(self) -> EvalContext:
         return _ctx(project_root=self._ROOT)
 
+    @pytest.mark.covers_policy('No write outside project')
     def test_write_etc_blocked(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -235,6 +276,7 @@ class TestScopeContainment:
         )
         assert result.action == Action.block
 
+    @pytest.mark.covers_policy('No shell write to sensitive paths')
     def test_bash_shell_write_outside_blocked(self, policies: list[dict]) -> None:
         # Layer B sets target.host for shell writes; Layer C contains them.
         engine = PolicyEngine()
@@ -285,6 +327,7 @@ class TestScopeContainment:
 class TestTaintedPathPolicies:
     """tainted_path_block: exec/network blocked after secret file read."""
 
+    @pytest.mark.covers_policy('No exec after secret read')
     def test_exec_after_secret_read_blocked(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -335,6 +378,7 @@ class TestTaintedPathPolicies:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('No network after secret read')
     def test_network_after_secret_read_blocked(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -365,6 +409,7 @@ class TestTaintedPathPolicies:
 class TestRunawayPrevention:
     """execution_max_steps + max_consecutive_same_type."""
 
+    @pytest.mark.covers_policy('Max exec per task')
     def test_max_exec_at_50(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -386,6 +431,7 @@ class TestRunawayPrevention:
         )
         assert result.action == Action.block
 
+    @pytest.mark.covers_policy('Max consecutive exec')
     def test_max_consecutive_exec_at_10(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -415,6 +461,7 @@ class TestNoPiiInCommands:
     behavior's ``input`` field, which is what ``pii_in_request`` scans.
     """
 
+    @pytest.mark.covers_policy('No PII in commands')
     def test_ssn_in_command_blocked(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)

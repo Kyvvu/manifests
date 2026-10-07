@@ -72,6 +72,7 @@ class TestDemoRegistration:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Agent purpose required')
     def test_violating_registration_empty_purpose(self, policies: list[dict]) -> None:
         """Agent with an empty purpose fails registration."""
         engine = PolicyEngine()
@@ -95,6 +96,7 @@ class TestDemoStepExecution:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Max LLM calls per task')
     def test_violating_exceeds_model_call_limit(self, policies: list[dict]) -> None:
         """Exceeding 10 model calls triggers the execution_max_steps policy."""
         engine = PolicyEngine()

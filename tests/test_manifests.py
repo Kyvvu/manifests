@@ -17,8 +17,10 @@ Tests cover:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
+import pytest
 from kyvvu_engine.rules import PolicyRule
 
 # ---------------------------------------------------------------------------
@@ -248,3 +250,23 @@ class TestSpdxHeader:
             f"{manifest_path} does not start with SPDX header. "
             f"First line: {first_line!r}"
         )
+
+
+def test_every_policy_has_a_trace_assertion(
+    manifest_path: str, manifest_data: dict[str, Any], request: pytest.FixtureRequest
+) -> None:
+    """Every shipped policy must have a trace that asserts its own outcome."""
+    path = Path(manifest_path).resolve()
+    covered = {
+        name
+        for item in request.session.items
+        if Path(getattr(item.module, "MANIFEST_PATH", "")).resolve() == path
+        for marker in item.iter_markers("covers_policy")
+        for name in marker.args
+    }
+    names = [policy["name"] for policy in manifest_data["policies"]]
+    assert len(names) == len(set(names)), f"Duplicate policy names in {path}"
+    missing = set(names) - covered
+    assert not missing, f"{path}: policies without trace assertions: {sorted(missing)}"
+    unknown = covered - set(names)
+    assert not unknown, f"{path}: trace assertions for unknown policies: {sorted(unknown)}"

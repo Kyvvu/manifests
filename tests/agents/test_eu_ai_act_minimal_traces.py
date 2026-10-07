@@ -70,6 +70,7 @@ def _behavior(
 class TestRegistration:
     """Registration-time policies: documentation baseline."""
 
+    @pytest.mark.covers_policy('Agent must have an identifying name', 'Agent must have a designated owner', violated=False)
     def test_compliant_registration(self, policies: list[dict]) -> None:
         """Agent with all required fields passes registration."""
         engine = PolicyEngine()
@@ -85,6 +86,7 @@ class TestRegistration:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Agent must have a documented purpose')
     def test_violating_empty_purpose(self, policies: list[dict]) -> None:
         """Agent with empty purpose fails the field_not_empty check."""
         engine = PolicyEngine()
@@ -100,6 +102,7 @@ class TestRegistration:
         )
         assert result.action != Action.allow
 
+    @pytest.mark.covers_policy('Risk classification must be valid')
     def test_violating_invalid_risk_classification(self, policies: list[dict]) -> None:
         """Agent with an invalid risk classification is blocked."""
         engine = PolicyEngine()
@@ -115,6 +118,7 @@ class TestRegistration:
         )
         assert result.action != Action.allow
 
+    @pytest.mark.covers_policy('Agent purpose must be substantive')
     def test_violating_short_purpose_regex(self, policies: list[dict]) -> None:
         """A non-empty purpose under 20 chars fails the substantive-purpose regex."""
         engine = PolicyEngine()
@@ -156,6 +160,7 @@ class TestTransparencyObligations:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Chatbot disclosure gate required before outbound messages')
     def test_violating_message_without_gate(self, policies: list[dict]) -> None:
         """Outbound message without any gate in history triggers a violation.
 
@@ -187,6 +192,7 @@ class TestTransparencyObligations:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('AI-generated content must be marked before delivery')
     def test_violating_model_call_without_gate(self, policies: list[dict]) -> None:
         """Model call without a preceding gate violates Article 50(3)."""
         engine = PolicyEngine()

@@ -87,6 +87,7 @@ def _freeze_market_hours(monkeypatch: pytest.MonkeyPatch) -> None:
 class TestRegistration:
     """Financial services registration policies."""
 
+    @pytest.mark.covers_policy('Agent must document its financial services purpose', 'Agent must designate a responsible owner', 'Agent must designate a maintainer', violated=False)
     def test_compliant_registration(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -101,6 +102,7 @@ class TestRegistration:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Financial agents must be high or limited risk')
     def test_violating_minimal_risk(self, policies: list[dict]) -> None:
         """Financial agents must be high or limited risk."""
         engine = PolicyEngine()
@@ -139,6 +141,7 @@ class TestHumanApprovalGate:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Financial write operations require human approval')
     def test_violating_post_without_approval(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -153,6 +156,7 @@ class TestHumanApprovalGate:
 class TestMarketDataTaint:
     """DORA Article 9: market data read permanently taints trade execution."""
 
+    @pytest.mark.covers_policy('Market data read taints downstream trade execution')
     def test_violating_trade_after_market_data_read(self, policies: list[dict]) -> None:
         """Resource POST is blocked after reading from market data provider."""
         engine = PolicyEngine()
@@ -247,6 +251,7 @@ class TestWorkingHours:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Restrict execution to market hours')
     def test_violating_outside_market_hours(
         self, policies: list[dict], monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -289,6 +294,7 @@ class TestLlmCallLimit:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Limit LLM calls per task')
     def test_violating_exceeds_llm_limit(self, policies: list[dict]) -> None:
         """A 21st model call exceeds the 20-call limit (severity high → warn)."""
         engine = PolicyEngine()
@@ -314,6 +320,7 @@ class TestLlmCallLimit:
 class TestApprovalIntegrity:
     """MiFID II Article 27: no LLM call between approval and trade."""
 
+    @pytest.mark.covers_policy('No LLM call between approval and trade execution')
     def test_violating_model_between_gate_and_trade(self, policies: list[dict]) -> None:
         """Gate -> model -> resource POST is blocked (model intervenes)."""
         engine = PolicyEngine()

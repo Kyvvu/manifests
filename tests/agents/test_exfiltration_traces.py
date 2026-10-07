@@ -73,6 +73,7 @@ def _behavior(
 class TestTaintedPathBlock:
     """Layer 1: sensitive data read permanently taints the task path."""
 
+    @pytest.mark.covers_policy('Block external send after sensitive data read')
     def test_violating_send_after_sensitive_read(self, policies: list[dict]) -> None:
         """step.resource GET (pii) -> step.message POST -> BLOCK.
 
@@ -162,6 +163,7 @@ class TestTaintedPathBlock:
 class TestGateRequirement:
     """Layer 2: step.message requires an exfiltration_review gate."""
 
+    @pytest.mark.covers_policy('External sends require an exfiltration review gate')
     def test_violating_message_without_gate(self, policies: list[dict]) -> None:
         """Outbound message without exfiltration_review gate is blocked."""
         engine = PolicyEngine()
@@ -182,6 +184,7 @@ class TestGateRequirement:
 class TestDomainAllowlist:
     """Layer 3: outbound resource calls restricted to approved domains."""
 
+    @pytest.mark.covers_policy('Restrict outbound to approved domains')
     def test_violating_off_allowlist_domain(self, policies: list[dict]) -> None:
         """A resource call to an unapproved host is blocked."""
         engine = PolicyEngine()
@@ -255,6 +258,7 @@ class TestDomainAllowlist:
 class TestPiiInPayload:
     """Layer 4: outbound payloads scanned for PII patterns."""
 
+    @pytest.mark.covers_policy('Scan outbound payloads for PII patterns')
     def test_violating_ssn_in_payload(self, policies: list[dict]) -> None:
         """An SSN in the request payload is blocked by pii_in_request."""
         engine = PolicyEngine()
@@ -298,6 +302,7 @@ class TestPiiInPayload:
 class TestSequenceForbidden:
     """Layer 5: credential read -> message is forbidden."""
 
+    @pytest.mark.covers_policy('Forbid credential read followed by external send')
     def test_violating_credential_then_message(self, policies: list[dict]) -> None:
         """step.credential -> step.message is a forbidden sequence."""
         engine = PolicyEngine()

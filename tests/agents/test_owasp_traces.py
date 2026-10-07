@@ -85,6 +85,7 @@ class TestRegistration:
         "risk_classification": "high",
     }
 
+    @pytest.mark.covers_policy('Agent must declare a valid risk classification', violated=False)
     def test_compliant_registration(self, policies: list[dict]) -> None:
         """A substantive purpose + non-empty declared_tools registers cleanly."""
         engine = PolicyEngine()
@@ -92,6 +93,7 @@ class TestRegistration:
         result = engine.evaluate_registration(dict(self._VALID_PROFILE), _ctx())
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Agent must declare a substantive purpose')
     def test_violating_short_purpose(self, policies: list[dict]) -> None:
         """A purpose under 30 chars violates the substantive-purpose regex."""
         engine = PolicyEngine()
@@ -104,6 +106,7 @@ class TestRegistration:
             for p in result.policies
         )
 
+    @pytest.mark.covers_policy('Agent must declare a tool allowlist')
     def test_violating_missing_declared_tools(self, policies: list[dict]) -> None:
         """A missing declared_tools field violates the tool-allowlist policy.
 
@@ -147,6 +150,7 @@ class TestToolAllowlist:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Tool calls must be in the declared allowlist')
     def test_violating_tool_not_in_allowlist(self, policies: list[dict]) -> None:
         """Tool call with step_name not in declared_tools is blocked."""
         engine = PolicyEngine()
@@ -179,6 +183,7 @@ class TestCodeExecutionGate:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Code execution requires a preceding gate')
     def test_violating_exec_without_gate(self, policies: list[dict]) -> None:
         """step.exec without any gate in history is blocked."""
         engine = PolicyEngine()
@@ -211,6 +216,7 @@ class TestDestructiveOperationGate:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Destructive resource operations require a preceding gate')
     def test_violating_delete_without_gate(self, policies: list[dict]) -> None:
         """Resource DELETE without gate is blocked."""
         engine = PolicyEngine()
@@ -258,6 +264,7 @@ class TestExternalContentTaint:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('External content taint: high-impact actions require a fresh gate')
     def test_violating_exec_after_external_without_fresh_gate(
         self, policies: list[dict]
     ) -> None:
@@ -317,6 +324,7 @@ class TestRunawayPrevention:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Bound resource calls per task to prevent runaway loops')
     def test_violating_exceeds_limit(self, policies: list[dict]) -> None:
         """Exceeding 50 resource calls triggers the block."""
         engine = PolicyEngine()

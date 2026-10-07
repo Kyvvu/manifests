@@ -67,6 +67,7 @@ def _behavior(
 class TestRegistration:
     """Healthcare registration policies."""
 
+    @pytest.mark.covers_policy('Agent must document its healthcare purpose', 'Agent must designate a responsible owner', violated=False)
     def test_compliant_registration(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -80,6 +81,7 @@ class TestRegistration:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Healthcare agents must be classified as high risk')
     def test_violating_non_high_risk(self, policies: list[dict]) -> None:
         """Healthcare agents must be classified as high risk."""
         engine = PolicyEngine()
@@ -98,6 +100,7 @@ class TestRegistration:
 class TestPiiDetection:
     """PHI pattern scanning in outbound payloads."""
 
+    @pytest.mark.covers_policy('Scan outbound payloads for PHI patterns')
     def test_violating_ssn_in_payload(self, policies: list[dict]) -> None:
         """Payload containing a US SSN pattern triggers pii_in_request."""
         engine = PolicyEngine()
@@ -178,6 +181,7 @@ class TestPatientConsentGate:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('PHI access requires patient consent gate')
     def test_violating_resource_without_consent(self, policies: list[dict]) -> None:
         """A resource access with no consent gate in history is blocked."""
         engine = PolicyEngine()
@@ -201,6 +205,7 @@ class TestPatientConsentGate:
 class TestHealthcareDomainAllowlist:
     """PHI access restricted to approved healthcare domains."""
 
+    @pytest.mark.covers_policy('Restrict data access to approved healthcare domains')
     def test_violating_off_allowlist_domain(self, policies: list[dict]) -> None:
         """A resource call to an unapproved host is blocked (even with consent)."""
         engine = PolicyEngine()
@@ -263,6 +268,7 @@ class TestHealthcareDomainAllowlist:
 class TestCodeExecutionForbidden:
     """step.exec is forbidden for high-risk healthcare agents."""
 
+    @pytest.mark.covers_policy('Code execution is forbidden for healthcare agents')
     def test_violating_exec_for_high_risk(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)

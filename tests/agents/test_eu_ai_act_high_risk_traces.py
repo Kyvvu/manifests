@@ -70,6 +70,7 @@ def _behavior(
 class TestRegistration:
     """Registration-time policies for high-risk agents."""
 
+    @pytest.mark.covers_policy('Agent must specify risk classification', 'Risk classification must be valid', 'Agent must have a documented purpose', 'Agent must have an identifying name', 'Agent must have a designated owner', violated=False)
     def test_compliant_high_risk_registration(self, policies: list[dict]) -> None:
         """HIGH risk agent with all required fields passes."""
         engine = PolicyEngine()
@@ -89,6 +90,7 @@ class TestRegistration:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('HIGH risk agents must have detailed purpose documentation')
     def test_violating_short_purpose_for_high_risk(self, policies: list[dict]) -> None:
         """HIGH risk agent with a purpose under 50 chars fails."""
         engine = PolicyEngine()
@@ -105,6 +107,7 @@ class TestRegistration:
         )
         assert result.action != Action.allow
 
+    @pytest.mark.covers_policy('HIGH risk agents must have a designated maintainer')
     def test_violating_missing_maintainer_for_high_risk(self, policies: list[dict]) -> None:
         """HIGH risk agent without a maintainer_id violates field_not_empty."""
         engine = PolicyEngine()
@@ -134,6 +137,7 @@ class TestRegistration:
 class TestDataQualityGate:
     """Article 10: a step.gate must precede any step.model (step_requires_predecessor)."""
 
+    @pytest.mark.covers_policy('Limit model calls per task for robustness', violated=False)
     def test_compliant_model_after_gate(self, policies: list[dict]) -> None:
         """A model call preceded by a gate satisfies the data-quality predecessor."""
         engine = PolicyEngine()
@@ -155,6 +159,7 @@ class TestDataQualityGate:
             for p in result.policies
         )
 
+    @pytest.mark.covers_policy('HIGH risk - Data quality gate required before model calls')
     def test_violating_model_without_predecessor_gate(self, policies: list[dict]) -> None:
         """A model call with no prior step.gate violates step_requires_predecessor."""
         engine = PolicyEngine()
@@ -192,6 +197,7 @@ class TestHumanOversight:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('HIGH risk - Mutating resource operations require human approval')
     def test_violating_resource_post_without_gate(self, policies: list[dict]) -> None:
         """Resource POST without any gate in history is blocked."""
         engine = PolicyEngine()
@@ -220,6 +226,7 @@ class TestHumanOversight:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('HIGH risk - Destructive operations require human approval')
     def test_violating_resource_delete_without_gate(self, policies: list[dict]) -> None:
         """Resource DELETE without gate is blocked."""
         engine = PolicyEngine()
@@ -249,6 +256,7 @@ class TestRobustness:
         # The execution_max_steps policy should also pass (0 prior steps).
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Limit resource calls per task for robustness')
     def test_violating_exceeds_resource_limit(self, policies: list[dict]) -> None:
         """Exceeding 50 resource calls triggers execution_max_steps."""
         engine = PolicyEngine()

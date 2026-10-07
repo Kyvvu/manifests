@@ -6,6 +6,9 @@
 # from common autonomous coding agent risks without interfering with
 # normal development workflow. Assign to any agent registered via
 # kyvvu-claude.
+# Bash read/write detection uses regex over command text, so shell indirection
+# can evade it and a quoted `>` can create a false target. See "What this does
+# not prevent" in kyvvu-claude/README.md. Use OS file and network controls too.
 
 name: "Claude Code Safety"
 description: |
@@ -203,7 +206,7 @@ policies:
 
       Scoped to write operations: step.exec (Bash, which only sets target.host
       when the command writes) and step.resource POST/PATCH (Write/Edit/
-      NotebookEdit). Reads (GET) are intentionally NOT contained here — they are
+      NotebookEdit). Other reads (GET) are not project-contained — they are
       governed by the secret-read / taint policies above.
 
       Containment requires project_root to be known. kyvvu-claude populates it
@@ -213,18 +216,37 @@ policies:
       Known limit: paths are normalized lexically (no filesystem I/O), so '..'
       is collapsed but symlinks pointing out of the tree are not resolved. The
       OS read-only mount complements (does not replace) this control.
-    rule_type: path_within_root
+      Also keep the governed agent away from kyvvu-claude and its local
+      enforcement state, including Claude Code hook settings.
+    rule_type: all_of
     params:
-      field: target.host
-      target_step_types: ["step.exec", "step.resource"]
-      target_verbs: ["POST", "PATCH", "DELETE"]
+      conditions:
+        - rule_type: path_within_root
+          params:
+            field: target.host
+            target_step_types: ["step.exec", "step.resource"]
+            target_verbs: ["POST", "PATCH", "DELETE"]
+        - rule_type: not
+          params:
+            condition:
+              rule_type: field_matches_regex
+              params:
+                field: exec.command
+                pattern: "(^|[^A-Za-z0-9_-])kyvvu-claude([^A-Za-z0-9_-]|$)|\\.kyvvu-claude/|\\.claude/settings\\.json"
+        - rule_type: not
+          params:
+            condition:
+              rule_type: field_matches_regex
+              params:
+                field: target.host
+                pattern: "(^|/)\\.kyvvu-claude(/|$)|(^|/)\\.claude/settings\\.json$"
     severity: critical
     enforcement_point: step_execution
   # --------------------------------------------------------------------------
   # SHELL WRITE / SECRET-READ STOPGAPS (#239 Layer A)
   #
-  # "No write outside project" only inspects target.host, which the Write/Edit
-  # tools set — Bash is blind to it. These two exec.command regex policies are a
+  # The containment part of "No write outside project" inspects target.host,
+  # which the Write/Edit tools set. These two exec.command regex policies are a
   # stopgap that close the most common shell write/secret-read vectors directly
   # on the command string. They mirror the destructive-delete pattern (`not` over
   # `field_matches_regex` on exec.command) and use only the existing engine rule.
@@ -234,8 +256,8 @@ policies:
   # with an explicit `^`: the operator must be in command position, and the two
   # patterns below then use `.*` to find it anywhere after the start.
   #
-  # HONEST LIMIT (regex on an opaque shell string cannot catch these — they need
-  # a command parser and are out of scope; documented, not pretended):
+  # HONEST LIMIT (regex on an opaque shell string cannot catch these; even a
+  # shell parser cannot resolve runtime indirection, so it is not the fix):
   #   * env indirection / quoting:  T=/etc; echo x > $T/passwd ; cat "$SECRET"
   #   * here-docs / python -c:       python -c "open('/etc/x','w')"
   #   * sed -i:                       the write pattern intentionally omits sed -i

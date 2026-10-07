@@ -65,6 +65,7 @@ def _behavior(
 class TestRegistration:
     """Registration policies for the internal starter."""
 
+    @pytest.mark.covers_policy('Agent must have a name', 'Agent must document its purpose', violated=False)
     def test_compliant_registration(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -78,6 +79,7 @@ class TestRegistration:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Agent must designate an owner')
     def test_violating_no_owner(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -101,6 +103,7 @@ class TestToolAllowlist:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Tool calls must be in the declared allowlist')
     def test_violating_tool_not_in_allowlist(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -153,6 +156,7 @@ class TestTokenBudget:
             p.violated and p.rule_type == "usage_budget" for p in result.policies
         )
 
+    @pytest.mark.covers_policy('Token budget per task')
     def test_violating_exceeds_budget(self, policies: list[dict]) -> None:
         """Cumulative recorded tokens over 100k blocks the next model call."""
         engine = PolicyEngine()
@@ -214,6 +218,7 @@ class TestDestructiveGate:
             p.violated and p.rule_type == "step_requires_gate" for p in result.policies
         )
 
+    @pytest.mark.covers_policy('Destructive operations require human approval')
     def test_violating_delete_without_gate(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -231,6 +236,7 @@ class TestDestructiveGate:
 class TestLlmCallLimit:
     """execution_max_steps: cap step.model calls at 50 per task."""
 
+    @pytest.mark.covers_policy('Limit LLM calls per task')
     def test_violating_exceeds_llm_limit(self, policies: list[dict]) -> None:
         """A 51st model call exceeds the 50-call limit.
 
@@ -275,6 +281,7 @@ class TestConsecutiveLimit:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Prevent infinite LLM loops')
     def test_violating_exceeds_consecutive_limit(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)

@@ -64,6 +64,7 @@ def _behavior(
 class TestRegistration:
     """GDPR registration policies."""
 
+    @pytest.mark.covers_policy('Agent must designate a DSR response contact', violated=False)
     def test_compliant_registration(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -76,6 +77,7 @@ class TestRegistration:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Agent must document processing purpose')
     def test_violating_empty_purpose(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -85,6 +87,7 @@ class TestRegistration:
         )
         assert result.action != Action.allow
 
+    @pytest.mark.covers_policy('Agent processing purpose must be substantive')
     def test_violating_short_purpose_regex(self, policies: list[dict]) -> None:
         """A non-empty purpose under 30 chars passes field_not_empty but fails the regex."""
         engine = PolicyEngine()
@@ -102,6 +105,7 @@ class TestRegistration:
 class TestErasureGate:
     """Article 17: DELETE operations require an erasure_approval gate."""
 
+    @pytest.mark.covers_policy('Limit resource access scope per task', violated=False)
     def test_compliant_delete_with_gate(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -121,6 +125,7 @@ class TestErasureGate:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Erasure operations require an approval gate')
     def test_violating_delete_without_gate(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
@@ -154,6 +159,7 @@ class TestAutomatedDecisionGate:
         )
         assert result.action == Action.allow
 
+    @pytest.mark.covers_policy('Automated decisions on personal data require consent gate')
     def test_violating_model_without_consent(self, policies: list[dict]) -> None:
         engine = PolicyEngine()
         engine.load_policies(policies)
