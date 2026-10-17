@@ -3,13 +3,13 @@
 # Healthcare — NEN 7510 / HIPAA
 #
 # Policies for AI agents handling Protected Health Information (PHI).
-# Covers PII/PHI detection, data residency restrictions, patient consent
+# Covers data residency restrictions, patient consent
 # gates, and code execution prohibitions for high-risk healthcare agents.
 #
 # Based on: NEN 7510 (Dutch healthcare information security),
 #           HIPAA Privacy Rule (45 CFR Part 164)
 #
-# NOTE: Domain allowlist values and PII regex patterns are examples.
+# NOTE: Domain allowlist values are examples.
 # Customize per deployment before production use.
 
 name: "Healthcare — NEN 7510 / HIPAA"
@@ -18,14 +18,13 @@ description: |
   in healthcare contexts. Implements controls from NEN 7510 (Dutch
   healthcare information security standard) and the HIPAA Privacy Rule.
 
-  Covers PHI pattern detection in outbound payloads, data residency
-  restrictions via domain allowlisting, patient consent gates, and
+  Covers data residency restrictions via domain allowlisting, patient consent gates, and
   prohibition of arbitrary code execution for high-risk healthcare agents.
 
-  IMPORTANT: The PII regex patterns and allowed domains in this manifest
-  are examples. Customize them for your deployment before production use.
+  IMPORTANT: The allowed domains in this manifest are examples.
+  Customize them for your deployment before production use.
 
-version: "1.0.0"
+version: "1.0.4"
 
 policies:
   # ==========================================================================
@@ -67,23 +66,6 @@ policies:
   # STEP EXECUTION
   # ==========================================================================
 
-  - name: "Scan outbound payloads for PHI patterns"
-    description: |
-      HIPAA 45 CFR 164.502(a) — PHI must not be disclosed except as
-      permitted. This policy scans outbound request payloads for common
-      PHI identifiers: US Social Security Numbers, Dutch BSN (Citizen
-      Service Numbers), and email addresses.
-
-      IMPORTANT: These regex patterns are examples. Customize them for
-      your jurisdiction and data types before production use.
-    rule_type: pii_in_request
-    params:
-      patterns:
-        - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
-        - "\\b\\d{9}\\b"
-        - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
-    severity: critical
-    enforcement_point: step_execution
   - name: "Restrict data access to approved healthcare domains"
     description: |
       NEN 7510 clause 13.1 — Network security management: restrict
@@ -95,7 +77,7 @@ policies:
     rule_type: domain_allowlist
     params:
       allowed_domains: ["ehr.example.com", "fhir.example.com"]
-      target_step_types: ["step.resource"]
+      target_kinds: ["step.resource"]
     severity: critical
     enforcement_point: step_execution
   - name: "PHI access requires patient consent gate"
@@ -106,8 +88,8 @@ policies:
       authorization is on file.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.resource"]
-      gate_check_type: patient_consent
+      target_kinds: ["step.resource"]
+      gate_kind: human
     severity: critical
     enforcement_point: step_execution
   - name: "Code execution is forbidden for healthcare agents"
@@ -118,7 +100,7 @@ policies:
       for all high-risk healthcare agents.
     rule_type: step_forbidden_for_classification
     params:
-      forbidden_step_type: step.exec
+      forbidden_kind: step.exec
       agent_risk_classifications: ["high"]
     severity: critical
     enforcement_point: step_execution

@@ -2,12 +2,13 @@
 #
 # OWASP Top 10 for Agentic Applications (2026) - Default Kyvvu Template
 #
-# Eight policies covering the OWASP Top 10 for Agentic Applications (ASI01-ASI10)
-# at agent *development time*. This is the recommended default for new Kyvvu
-# installations: every policy works on day one with zero per-deployment tuning.
+# Eight policies covering the OWASP Top 10 for Agentic Applications
+# (ASI01-ASI10) at agent *development time*. This is the recommended
+# default for new Kyvvu installations: every policy works on day one
+# with zero per-deployment tuning.
 #
 # Based on: OWASP Top 10 for Agentic Applications, December 2025 release
-#           https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/
+# Source: https://genai.owasp.org/download/52117/
 # Template Version: 1.0
 # Last Updated: April 29, 2026
 #
@@ -48,7 +49,7 @@ description: |
 
   Pair with a compliance template (e.g. EU AI Act) for regulatory coverage.
 
-version: "1.0.0"
+version: "1.0.2"
 
 policies:
   # ==========================================================================
@@ -118,7 +119,7 @@ policies:
     rule_type: step_name_in_allowlist
     params:
       agent_field: declared_tools
-      target_step_types: ["step.resource", "step.exec", "step.credential"]
+      target_kinds: ["step.resource", "step.exec", "step.credential"]
     severity: critical
     enforcement_point: step_execution
   # ==========================================================================
@@ -138,7 +139,7 @@ policies:
       Applies to: ALL agents.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.exec"]
+      target_kinds: ["step.exec"]
     severity: critical
     enforcement_point: step_execution
   - name: "Destructive resource operations require a preceding gate"
@@ -152,7 +153,7 @@ policies:
       Applies to: ALL agents.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.resource"]
+      target_kinds: ["step.resource"]
       target_verb: DELETE
     severity: critical
     enforcement_point: step_execution
@@ -203,26 +204,27 @@ policies:
                 conditions:
                   - rule_type: current_is
                     params:
-                      step_type: step.exec
+                      kind: step.exec
                   - rule_type: current_is
                     params:
-                      step_type: step.message
+                      kind: step.message
                       verb: POST
                   - rule_type: current_is
                     params:
-                      step_type: step.resource
+                      kind: step.resource
                       verb: POST
                   - rule_type: current_is
                     params:
-                      step_type: step.resource
+                      kind: step.resource
                       verb: PATCH
                   - rule_type: current_is
                     params:
-                      step_type: step.resource
+                      kind: step.resource
                       verb: DELETE
             - rule_type: history_contains
               params:
-                step_type: step.resource
+                kind: step.resource
+                count_attempts: true
                 verb: GET
                 property_filter:
                   target.trust: external
@@ -231,7 +233,7 @@ policies:
                 condition:
                   rule_type: step_directly_preceded_by
                   params:
-                    required_step_type: step.gate
+                    required_kind: step.gate
     severity: critical
     enforcement_point: step_execution
   # ==========================================================================
@@ -255,7 +257,7 @@ policies:
       Applies to: ALL agents.
     rule_type: execution_max_steps
     params:
-      step_type: step.resource
+      kind: step.resource
       max_steps: 50
     severity: high
     enforcement_point: step_execution

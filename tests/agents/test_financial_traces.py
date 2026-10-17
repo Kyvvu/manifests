@@ -7,13 +7,12 @@ from datetime import datetime, timezone
 
 import pytest
 import yaml
-
 from kyvvu_engine.engine import PolicyEngine
 from kyvvu_engine.schemas import (
     Action,
+    ActionKind,
     Behavior,
     EvalContext,
-    StepType,
     Verb,
 )
 
@@ -45,20 +44,22 @@ def _ctx(risk: str = "high") -> EvalContext:
 
 
 def _behavior(
-    step_type: StepType,
+    step_type: ActionKind,
     verb: Verb | None = None,
     *,
     step_name: str = "test_step",
     properties: dict | None = None,
+    output: dict | None = None,
 ) -> Behavior:
     return Behavior(
         agent_id="finance-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
-        step_type=step_type,
+        kind=step_type,
         verb=verb,
         step_name=step_name,
         properties=properties or {},
+        output=output,
     )
 
 
@@ -128,15 +129,13 @@ class TestHumanApprovalGate:
         ctx = _ctx()
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="trade_approval",
-                properties={
-                    "guard": {"check_type": "human_approval", "result": "pass"}
-                },
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.POST, step_name="execute_trade"),
+            _behavior(ActionKind.step_resource, Verb.POST, step_name="execute_trade"),
             ctx,
         )
         assert result.action == Action.allow
@@ -147,7 +146,7 @@ class TestHumanApprovalGate:
         engine.load_policies(policies)
         ctx = _ctx()
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.POST, step_name="execute_trade"),
+            _behavior(ActionKind.step_resource, Verb.POST, step_name="execute_trade"),
             ctx,
         )
         assert result.action == Action.block
@@ -165,7 +164,7 @@ class TestMarketDataTaint:
         # Read market data.
         engine.record(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="fetch_prices",
                 properties={"target": {"host": "market-data.example.com"}},
@@ -174,16 +173,14 @@ class TestMarketDataTaint:
         # Record approval gate.
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="trade_approval",
-                properties={
-                    "guard": {"check_type": "human_approval", "result": "pass"}
-                },
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         # Attempt trade — blocked by taint even though gate is present.
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.POST, step_name="execute_trade"),
+            _behavior(ActionKind.step_resource, Verb.POST, step_name="execute_trade"),
             ctx,
         )
         assert result.action == Action.block
@@ -196,7 +193,7 @@ class TestMarketDataTaint:
         # Read from internal source (not market data).
         engine.record(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="fetch_portfolio",
                 properties={"target": {"host": "internal.example.com"}},
@@ -204,15 +201,13 @@ class TestMarketDataTaint:
         )
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="trade_approval",
-                properties={
-                    "guard": {"check_type": "human_approval", "result": "pass"}
-                },
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.POST, step_name="execute_trade"),
+            _behavior(ActionKind.step_resource, Verb.POST, step_name="execute_trade"),
             ctx,
         )
         assert result.action == Action.allow
@@ -246,7 +241,7 @@ class TestWorkingHours:
         engine = PolicyEngine()
         engine.load_policies(policies)
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="market_analysis"),
+            _behavior(ActionKind.step_model, None, step_name="market_analysis"),
             _ctx(),
         )
         assert result.action == Action.allow
@@ -260,7 +255,7 @@ class TestWorkingHours:
         engine = PolicyEngine()
         engine.load_policies(policies)
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="market_analysis"),
+            _behavior(ActionKind.step_model, None, step_name="market_analysis"),
             _ctx(),
         )
         assert result.action == Action.block
@@ -286,10 +281,10 @@ class TestLlmCallLimit:
         ctx = _ctx()
         for i in range(19):
             engine.record(
-                _behavior(StepType.step_model, Verb.POST, step_name=f"infer_{i}")
+                _behavior(ActionKind.step_model, None, step_name=f"infer_{i}")
             )
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="infer_20"),
+            _behavior(ActionKind.step_model, None, step_name="infer_20"),
             ctx,
         )
         assert result.action == Action.allow
@@ -302,10 +297,10 @@ class TestLlmCallLimit:
         ctx = _ctx()
         for i in range(20):
             engine.record(
-                _behavior(StepType.step_model, Verb.POST, step_name=f"infer_{i}")
+                _behavior(ActionKind.step_model, None, step_name=f"infer_{i}")
             )
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="infer_21"),
+            _behavior(ActionKind.step_model, None, step_name="infer_21"),
             ctx,
         )
         # severity=high → warn; assert the limit triggered a non-allow outcome
@@ -328,19 +323,17 @@ class TestApprovalIntegrity:
         ctx = _ctx()
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="trade_approval",
-                properties={
-                    "guard": {"check_type": "human_approval", "result": "pass"}
-                },
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         # LLM call between approval and trade.
         engine.record(
-            _behavior(StepType.step_model, Verb.POST, step_name="analyze_risk")
+            _behavior(ActionKind.step_model, None, step_name="analyze_risk")
         )
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.POST, step_name="execute_trade"),
+            _behavior(ActionKind.step_resource, Verb.POST, step_name="execute_trade"),
             ctx,
         )
         assert result.action == Action.block

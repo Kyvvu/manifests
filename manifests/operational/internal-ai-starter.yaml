@@ -17,7 +17,7 @@ description: |
   compliance manifests (EU AI Act, GDPR, etc.) as regulatory
   requirements emerge.
 
-version: "1.0.0"
+version: "1.0.2"
 
 policies:
   # ==========================================================================
@@ -58,7 +58,7 @@ policies:
   - name: "Tool calls must be in the declared allowlist"
     description: |
       Fail-closed tool allowlisting: agents without a declared_tools
-      allowlist are blocked from all tool calls on the listed step types.
+      allowlist are blocked from all tool calls on the listed action kinds.
       Agents with a declared_tools list can only invoke tools whose
       step_name appears in that list.
 
@@ -67,7 +67,7 @@ policies:
     rule_type: step_name_in_allowlist
     params:
       agent_field: declared_tools
-      target_step_types: ["step.resource", "step.exec", "step.credential"]
+      target_kinds: ["step.resource", "step.exec", "step.credential"]
     severity: critical
     enforcement_point: step_execution
   - name: "Limit LLM calls per task"
@@ -76,7 +76,7 @@ policies:
       runaway analysis loops, excessive cost, and cascading failures.
     rule_type: execution_max_steps
     params:
-      step_type: step.model
+      kind: step.model
       max_steps: 50
     severity: critical
     enforcement_point: step_execution
@@ -90,7 +90,7 @@ policies:
       per-task cost.
     rule_type: usage_budget
     params:
-      step_type: step.model
+      kind: step.model
       property_path: usage.total_tokens
       budget: 100000
     severity: critical
@@ -102,19 +102,19 @@ policies:
       destructive actions.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.resource", "step.exec"]
+      target_kinds: ["step.resource", "step.exec"]
       target_verb: DELETE
-      gate_check_type: human_approval
+      gate_kind: human
     severity: critical
     enforcement_point: step_execution
   - name: "Prevent infinite LLM loops"
     description: |
       Block tasks where the agent calls the model more than 5 times
-      consecutively without any other step type intervening. This
+      consecutively without any other action kind intervening. This
       catches agents stuck in a reasoning loop.
     rule_type: max_consecutive_same_type
     params:
-      step_type: step.model
+      kind: step.model
       max_consecutive: 5
     severity: critical
     enforcement_point: step_execution

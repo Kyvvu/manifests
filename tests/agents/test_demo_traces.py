@@ -12,13 +12,12 @@ from datetime import datetime, timezone
 
 import pytest
 import yaml
-
 from kyvvu_engine.engine import PolicyEngine
 from kyvvu_engine.schemas import (
     Action,
+    ActionKind,
     Behavior,
     EvalContext,
-    StepType,
     Verb,
 )
 
@@ -42,7 +41,7 @@ def _ctx() -> EvalContext:
 
 
 def _behavior(
-    step_type: StepType,
+    step_type: ActionKind,
     verb: Verb | None = None,
     *,
     step_name: str = "test_step",
@@ -52,7 +51,7 @@ def _behavior(
         agent_id="demo-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        step_type=step_type,
+        kind=step_type,
         verb=verb,
         step_name=step_name,
     )
@@ -91,7 +90,7 @@ class TestDemoStepExecution:
         engine.load_policies(policies)
         ctx = _ctx()
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="call_llm"),
+            _behavior(ActionKind.step_model, None, step_name="call_llm"),
             ctx,
         )
         assert result.action == Action.allow
@@ -104,11 +103,11 @@ class TestDemoStepExecution:
         ctx = _ctx()
         # Record 10 model calls.
         for _ in range(10):
-            b = _behavior(StepType.step_model, Verb.POST, step_name="call_llm")
+            b = _behavior(ActionKind.step_model, None, step_name="call_llm")
             engine.record(b)
         # The 11th should be blocked.
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="call_llm"),
+            _behavior(ActionKind.step_model, None, step_name="call_llm"),
             ctx,
         )
         assert result.action == Action.block

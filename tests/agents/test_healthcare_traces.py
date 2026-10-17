@@ -7,13 +7,12 @@ from datetime import datetime, timezone
 
 import pytest
 import yaml
-
 from kyvvu_engine.engine import PolicyEngine
 from kyvvu_engine.schemas import (
     Action,
+    ActionKind,
     Behavior,
     EvalContext,
-    StepType,
     Verb,
 )
 
@@ -45,21 +44,23 @@ def _ctx(risk: str = "high") -> EvalContext:
 
 
 def _behavior(
-    step_type: StepType,
+    step_type: ActionKind,
     verb: Verb | None = None,
     *,
     step_name: str = "test_step",
     properties: dict | None = None,
+    output: dict | None = None,
     input_data: dict | None = None,
 ) -> Behavior:
     return Behavior(
         agent_id="healthcare-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        step_type=step_type,
+        kind=step_type,
         verb=verb,
         step_name=step_name,
         properties=properties or {},
+        output=output,
         input=input_data,
     )
 
@@ -97,64 +98,6 @@ class TestRegistration:
         assert result.action == Action.block
 
 
-class TestPiiDetection:
-    """PHI pattern scanning in outbound payloads."""
-
-    @pytest.mark.covers_policy('Scan outbound payloads for PHI patterns')
-    def test_violating_ssn_in_payload(self, policies: list[dict]) -> None:
-        """Payload containing a US SSN pattern triggers pii_in_request."""
-        engine = PolicyEngine()
-        engine.load_policies(policies)
-        ctx = _ctx()
-        # Record a consent gate to satisfy other policies.
-        engine.record(
-            _behavior(
-                StepType.step_gate,
-                step_name="consent",
-                properties={
-                    "guard": {"check_type": "patient_consent", "result": "pass"}
-                },
-            )
-        )
-        result = engine.evaluate(
-            _behavior(
-                StepType.step_model,
-                Verb.POST,
-                step_name="analyze_report",
-                properties={"target": {"host": "ehr.example.com"}},
-                input_data={"patient_ssn": "123-45-6789"},
-            ),
-            ctx,
-        )
-        assert result.action == Action.block
-
-    def test_compliant_no_pii(self, policies: list[dict]) -> None:
-        """Clean payload passes pii_in_request."""
-        engine = PolicyEngine()
-        engine.load_policies(policies)
-        ctx = _ctx()
-        engine.record(
-            _behavior(
-                StepType.step_gate,
-                step_name="consent",
-                properties={
-                    "guard": {"check_type": "patient_consent", "result": "pass"}
-                },
-            )
-        )
-        result = engine.evaluate(
-            _behavior(
-                StepType.step_model,
-                Verb.POST,
-                step_name="analyze_report",
-                properties={"target": {"host": "ehr.example.com"}},
-                input_data={"report_text": "Normal chest X-ray findings"},
-            ),
-            ctx,
-        )
-        assert result.action == Action.allow
-
-
 class TestPatientConsentGate:
     """PHI access (step.resource) requires a patient_consent gate first."""
 
@@ -165,14 +108,14 @@ class TestPatientConsentGate:
         ctx = _ctx()
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="consent",
-                properties={"guard": {"check_type": "patient_consent", "result": "pass"}},
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="read_patient_record",
                 properties={"target": {"host": "ehr.example.com"}},
@@ -188,7 +131,7 @@ class TestPatientConsentGate:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="read_patient_record",
                 properties={"target": {"host": "ehr.example.com"}},
@@ -213,14 +156,14 @@ class TestHealthcareDomainAllowlist:
         ctx = _ctx()
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="consent",
-                properties={"guard": {"check_type": "patient_consent", "result": "pass"}},
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="read_external",
                 properties={"target": {"host": "leak.example.org"}},
@@ -238,7 +181,7 @@ class TestHealthcareDomainAllowlist:
         engine = PolicyEngine()
         engine.load_policies(policies)
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.GET, step_name="read_unknown"),
+            _behavior(ActionKind.step_resource, Verb.GET, step_name="read_unknown"),
             _ctx(),
         )
         assert any(
@@ -252,7 +195,7 @@ class TestHealthcareDomainAllowlist:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="fetch_ehr",
                 properties={"target": {"host": "https://ehr.example.com/v1"}},
@@ -274,7 +217,7 @@ class TestCodeExecutionForbidden:
         engine.load_policies(policies)
         ctx = _ctx()
         result = engine.evaluate(
-            _behavior(StepType.step_exec, step_name="run_script"),
+            _behavior(ActionKind.step_exec, step_name="run_script"),
             ctx,
         )
         assert result.action == Action.block

@@ -1,8 +1,7 @@
 """Agent trace tests for the data exfiltration guard manifest.
 
-The flagship path-dependent manifest. Tests the tainted_path_block rule
-(Layer 1), gate requirement (Layer 2), and credential-to-message sequence
-prohibition (Layer 5).
+The flagship path-dependent manifest. Tests the tainted_path_block rules
+(Layers 1 and 5) and gate requirement (Layer 2).
 """
 
 from __future__ import annotations
@@ -12,13 +11,12 @@ from datetime import datetime, timezone
 
 import pytest
 import yaml
-
 from kyvvu_engine.engine import PolicyEngine
 from kyvvu_engine.schemas import (
     Action,
+    ActionKind,
     Behavior,
     EvalContext,
-    StepType,
     Verb,
 )
 
@@ -50,11 +48,12 @@ def _ctx() -> EvalContext:
 
 
 def _behavior(
-    step_type: StepType,
+    step_type: ActionKind,
     verb: Verb | None = None,
     *,
     step_name: str = "test_step",
     properties: dict | None = None,
+    output: dict | None = None,
     input_data: dict | None = None,
 ) -> Behavior:
     """Build a minimal Behavior for evaluation."""
@@ -62,10 +61,11 @@ def _behavior(
         agent_id="exfil-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        step_type=step_type,
+        kind=step_type,
         verb=verb,
         step_name=step_name,
         properties=properties or {},
+        output=output,
         input=input_data,
     )
 
@@ -85,7 +85,7 @@ class TestTaintedPathBlock:
         # Record a sensitive data read.
         engine.record(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="read_customer_db",
                 properties={
@@ -97,17 +97,15 @@ class TestTaintedPathBlock:
         # Record an exfiltration review gate (does NOT clear taint).
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="exfiltration_review",
-                properties={
-                    "guard": {"check_type": "exfiltration_review", "result": "pass"}
-                },
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         # Attempt outbound message — should be blocked by taint.
         result = engine.evaluate(
             _behavior(
-                StepType.step_message,
+                ActionKind.step_message,
                 Verb.POST,
                 step_name="send_email",
                 properties={"target": {"host": "internal.example.com"}},
@@ -128,7 +126,7 @@ class TestTaintedPathBlock:
         # Record a non-sensitive resource read.
         engine.record(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="read_public_api",
                 properties={
@@ -140,17 +138,15 @@ class TestTaintedPathBlock:
         # Record the required exfiltration review gate.
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="exfiltration_review",
-                properties={
-                    "guard": {"check_type": "exfiltration_review", "result": "pass"}
-                },
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         # Outbound message on an allowed domain — should pass.
         result = engine.evaluate(
             _behavior(
-                StepType.step_message,
+                ActionKind.step_message,
                 Verb.POST,
                 step_name="send_notification",
                 properties={"target": {"host": "internal.example.com"}},
@@ -171,7 +167,7 @@ class TestGateRequirement:
         ctx = _ctx()
         result = engine.evaluate(
             _behavior(
-                StepType.step_message,
+                ActionKind.step_message,
                 Verb.POST,
                 step_name="send_email",
                 properties={"target": {"host": "internal.example.com"}},
@@ -191,7 +187,7 @@ class TestDomainAllowlist:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="fetch_external",
                 properties={"target": {"host": "evil.attacker.example"}},
@@ -210,7 +206,7 @@ class TestDomainAllowlist:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="fetch_internal",
                 properties={"target": {"host": "api.example.com"}},
@@ -227,7 +223,7 @@ class TestDomainAllowlist:
         engine = PolicyEngine()
         engine.load_policies(policies)
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.GET, step_name="read_unknown"),
+            _behavior(ActionKind.step_resource, Verb.GET, step_name="read_unknown"),
             _ctx(),
         )
         assert any(
@@ -242,7 +238,7 @@ class TestDomainAllowlist:
         host = "https://api.example.com/v1"
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="fetch_internal",
                 properties={"target": {"host": host}},
@@ -255,77 +251,31 @@ class TestDomainAllowlist:
         )
 
 
-class TestPiiInPayload:
-    """Layer 4: outbound payloads scanned for PII patterns."""
-
-    @pytest.mark.covers_policy('Scan outbound payloads for PII patterns')
-    def test_violating_ssn_in_payload(self, policies: list[dict]) -> None:
-        """An SSN in the request payload is blocked by pii_in_request."""
-        engine = PolicyEngine()
-        engine.load_policies(policies)
-        result = engine.evaluate(
-            _behavior(
-                StepType.step_resource,
-                Verb.POST,
-                step_name="post_report",
-                properties={"target": {"host": "api.example.com"}},
-                input_data={"body": "Customer SSN is 123-45-6789"},
-            ),
-            _ctx(),
-        )
-        assert result.action == Action.block
-        assert any(
-            p.violated and p.rule_type == "pii_in_request"
-            for p in result.policies
-        )
-
-    def test_compliant_no_pii_in_payload(self, policies: list[dict]) -> None:
-        """A payload free of PII does not trip pii_in_request."""
-        engine = PolicyEngine()
-        engine.load_policies(policies)
-        result = engine.evaluate(
-            _behavior(
-                StepType.step_resource,
-                Verb.POST,
-                step_name="post_report",
-                properties={"target": {"host": "api.example.com"}},
-                input_data={"body": "Quarterly revenue summary, no personal data."},
-            ),
-            _ctx(),
-        )
-        assert not any(
-            p.violated and p.rule_type == "pii_in_request"
-            for p in result.policies
-        )
-
-
-class TestSequenceForbidden:
-    """Layer 5: credential read -> message is forbidden."""
+class TestCredentialReadTaint:
+    """Layer 5: credential reads taint subsequent messages."""
 
     @pytest.mark.covers_policy('Forbid credential read followed by external send')
     def test_violating_credential_then_message(self, policies: list[dict]) -> None:
-        """step.credential -> step.message is a forbidden sequence."""
+        """A credential GET taints the path and blocks a later message."""
         engine = PolicyEngine()
         engine.load_policies(policies)
         ctx = _ctx()
         # Record credential read.
         engine.record(
-            _behavior(StepType.step_credential, Verb.GET, step_name="read_api_key")
+            _behavior(ActionKind.step_credential, Verb.GET, step_name="read_api_key")
         )
         # Record gate to satisfy Layer 2.
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="exfiltration_review",
-                properties={
-                    "guard": {"check_type": "exfiltration_review", "result": "pass"}
-                },
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
-        # Attempt message — blocked by sequence_forbidden.
+        # Attempt message — blocked by credential read taint.
         result = engine.evaluate(
             _behavior(
-                StepType.step_message,
+                ActionKind.step_message,
                 Verb.POST,
                 step_name="send_message",
                 properties={"target": {"host": "internal.example.com"}},
@@ -333,3 +283,37 @@ class TestSequenceForbidden:
             ctx,
         )
         assert result.action == Action.block
+        assert any(
+            p.name == "Forbid credential read followed by external send" and p.violated
+            for p in result.policies
+        )
+
+    @pytest.mark.parametrize("verb", [Verb.POST, Verb.PATCH, Verb.DELETE])
+    def test_credential_write_does_not_taint_message(
+        self, policies: list[dict], verb: Verb
+    ) -> None:
+        """Credential writes do not trigger the credential read policy."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        engine.record(_behavior(ActionKind.step_credential, verb, step_name="write_api_key"))
+        engine.record(
+            _behavior(
+                ActionKind.step_gate,
+                step_name="exfiltration_review",
+                properties={"kind": "human"}, output={"decision": "pass"},
+            )
+        )
+        result = engine.evaluate(
+            _behavior(
+                ActionKind.step_message,
+                Verb.POST,
+                step_name="send_message",
+                properties={"target": {"host": "internal.example.com"}},
+            ),
+            _ctx(),
+        )
+        assert result.action == Action.allow
+        assert any(
+            p.name == "Forbid credential read followed by external send" and not p.violated
+            for p in result.policies
+        )

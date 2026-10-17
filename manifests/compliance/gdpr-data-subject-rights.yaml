@@ -16,7 +16,7 @@ description: |
   data subject contact point (Article 13(1)(a)), and safeguards for
   automated decision-making (Article 22).
 
-version: "1.0.0"
+version: "1.0.2"
 
 policies:
   # ==========================================================================
@@ -67,9 +67,9 @@ policies:
       the request is legitimate and properly scoped.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.resource"]
+      target_kinds: ["step.resource"]
       target_verb: DELETE
-      gate_check_type: erasure_approval
+      gate_kind: human
     severity: critical
     enforcement_point: step_execution
   - name: "Automated decisions on personal data require consent gate"
@@ -82,8 +82,8 @@ policies:
       lawful basis.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.model"]
-      gate_check_type: data_subject_consent
+      target_kinds: ["step.model"]
+      gate_kind: human
     severity: critical
     enforcement_point: step_execution
   - name: "Limit resource access scope per task"
@@ -93,7 +93,7 @@ policies:
       beyond what is necessary for the stated purpose.
     rule_type: execution_max_steps
     params:
-      step_type: step.resource
+      kind: step.resource
       max_steps: 30
     severity: high
     enforcement_point: step_execution

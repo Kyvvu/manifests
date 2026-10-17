@@ -15,7 +15,7 @@ description: |
   Contains two basic governance policies: one registration-time check and
   one runtime guard-rail.
 
-version: "1.0.0"
+version: "1.0.1"
 
 policies:
   - name: "Agent purpose required"
@@ -35,7 +35,7 @@ policies:
       Demonstrates the step_execution enforcement point.
     rule_type: execution_max_steps
     params:
-      step_type: step.model
+      kind: step.model
       max_steps: 10
     severity: critical
     enforcement_point: step_execution

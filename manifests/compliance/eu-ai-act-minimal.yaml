@@ -20,7 +20,7 @@ description: |
   This manifest is intentionally lean: it enforces what the regulation
   requires for lower-risk tiers without imposing high-risk overhead.
 
-version: "1.0.0"
+version: "1.1.0"
 
 policies:
   # ==========================================================================
@@ -95,17 +95,49 @@ policies:
 
   - name: "AI-generated content must be marked before delivery"
     description: |
-      EU AI Act Article 50(3) requires that deployers of AI systems
-      generating synthetic audio, image, video, or text ensure outputs are
+      EU AI Act Article 50(2) requires providers of AI systems generating
+      synthetic audio, image, video, or text to ensure the outputs are
       marked in a machine-readable format and detectable as artificially
-      generated. A step.gate immediately before step.model enforces the
-      marking checkpoint.
+      generated. Marking applies to the model's output, so the checkpoint
+      sits between that output and its delivery: once a task holds a
+      completed step.model, every delivery step -- an outbound
+      step.message POST, or a step.resource POST to an external target --
+      must have a step.gate after the most recent step.model. A model step
+      on its own, and a delivery in a task with no model output, do not
+      trigger it.
 
       Applies to: ALL risk classifications.
-    rule_type: step_directly_preceded_by
+    rule_type: not
     params:
-      required_step_type: step.gate
-      target_step_types: ["step.model"]
+      condition:
+        rule_type: all_of
+        params:
+          conditions:
+            - rule_type: any_of
+              params:
+                conditions:
+                  - rule_type: current_is
+                    params:
+                      kind: step.message
+                      verb: POST
+                  - rule_type: current_is
+                    params:
+                      kind: step.resource
+                      verb: POST
+                      property_filter:
+                        target.trust: external
+            - rule_type: history_contains
+              params:
+                kind: step.model
+                count_attempts: false
+            - rule_type: not
+              params:
+                condition:
+                  rule_type: step_preceded_by_without_intervening
+                  params:
+                    required_kind: step.gate
+                    forbidden_intervening: ["step.model"]
+                    target_kinds: ["step.message", "step.resource"]
     severity: high
     enforcement_point: step_execution
   - name: "Chatbot disclosure gate required before outbound messages"
@@ -118,7 +150,7 @@ policies:
       Applies to: ALL risk classifications.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.message"]
+      target_kinds: ["step.message"]
       target_verb: POST
     severity: high
     enforcement_point: step_execution

@@ -15,7 +15,7 @@ description: |
   Default safety manifest for Claude Code agents. Every policy addresses
   a real risk that developers face when using autonomous coding agents:
   credential exfiltration, destructive commands, scope escape, runaway
-  loops, and PII leakage.
+  and runaway loops.
 
   All runtime policies are severity: critical (= block). These are
   genuinely dangerous actions where "warn but allow" makes no sense.
@@ -25,7 +25,7 @@ description: |
   Designed for agents registered via kyvvu-claude. Assign via the Kyvvu
   dashboard or API.
 
-version: "1.0.0"
+version: "1.0.5"
 
 policies:
   # ==========================================================================
@@ -47,11 +47,11 @@ policies:
       (or /clear) to reset.
     rule_type: tainted_path_block
     params:
-      taint_step_type: step.resource
+      taint_kind: step.resource
       taint_verb: GET
       taint_property_filter:
         data.classification: secret
-      target_step_types: ["step.exec"]
+      target_kinds: ["step.exec"]
     severity: critical
     enforcement_point: step_execution
   - name: "No network after secret read"
@@ -64,11 +64,11 @@ policies:
       new session to reset the taint.
     rule_type: tainted_path_block
     params:
-      taint_step_type: step.resource
+      taint_kind: step.resource
       taint_verb: GET
       taint_property_filter:
         data.classification: secret
-      target_step_types: ["step.resource"]
+      target_kinds: ["step.resource"]
       target_verb: GET
     severity: critical
     enforcement_point: step_execution
@@ -87,7 +87,7 @@ policies:
       condition:
         rule_type: field_matches_regex
         params:
-          field: exec.command
+          field: properties.command
           pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?git\\s+push\\s+.*--force"
     severity: critical
     enforcement_point: step_execution
@@ -131,7 +131,7 @@ policies:
       condition:
         rule_type: field_matches_regex
         params:
-          field: exec.command
+          field: properties.command
           pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*/(?:\\s|$|\\*)"
     severity: critical
     enforcement_point: step_execution
@@ -144,7 +144,7 @@ policies:
       condition:
         rule_type: field_matches_regex
         params:
-          field: exec.command
+          field: properties.command
           pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*(?:~|\\$HOME)/?(?:\\s|$)"
     severity: critical
     enforcement_point: step_execution
@@ -158,7 +158,7 @@ policies:
       condition:
         rule_type: field_matches_regex
         params:
-          field: exec.command
+          field: properties.command
           pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*\\.\\.(?:/\\.\\.)*/?(?:\\s|$)"
     severity: critical
     enforcement_point: step_execution
@@ -174,7 +174,7 @@ policies:
       condition:
         rule_type: field_matches_regex
         params:
-          field: exec.command
+          field: properties.command
           pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?rm\\s+(?:-\\S+\\s+)*-\\S*[rR]\\S*\\s+(?:-\\S+\\s+)*/(?:etc|bin|sbin|lib|lib64|boot|sys|proc|dev|System|Library)(?:/|\\s|$)"
     severity: critical
     enforcement_point: step_execution
@@ -187,7 +187,7 @@ policies:
       condition:
         rule_type: field_matches_regex
         params:
-          field: exec.command
+          field: properties.command
           pattern: "^(?:.*[;&|]\\s*)?(?:(?:sudo|doas|env|xargs|time|nice)\\s+)?git\\s+reset\\s+--hard"
     severity: critical
     enforcement_point: step_execution
@@ -223,22 +223,22 @@ policies:
       conditions:
         - rule_type: path_within_root
           params:
-            field: target.host
-            target_step_types: ["step.exec", "step.resource"]
+            field: properties.target.host
+            target_kinds: ["step.exec", "step.resource"]
             target_verbs: ["POST", "PATCH", "DELETE"]
         - rule_type: not
           params:
             condition:
               rule_type: field_matches_regex
               params:
-                field: exec.command
+                field: properties.command
                 pattern: "(^|[^A-Za-z0-9_-])kyvvu-claude([^A-Za-z0-9_-]|$)|\\.kyvvu-claude/|\\.claude/settings\\.json"
         - rule_type: not
           params:
             condition:
               rule_type: field_matches_regex
               params:
-                field: target.host
+                field: properties.target.host
                 pattern: "(^|/)\\.kyvvu-claude(/|$)|(^|/)\\.claude/settings\\.json$"
     severity: critical
     enforcement_point: step_execution
@@ -246,13 +246,13 @@ policies:
   # SHELL WRITE / SECRET-READ STOPGAPS (#239 Layer A)
   #
   # The containment part of "No write outside project" inspects target.host,
-  # which the Write/Edit tools set. These two exec.command regex policies are a
+  # which the Write/Edit tools set. These two command regex policies are a
   # stopgap that close the most common shell write/secret-read vectors directly
   # on the command string. They mirror the destructive-delete pattern (`not` over
-  # `field_matches_regex` on exec.command) and use only the existing engine rule.
+  # `field_matches_regex` on command) and use only the existing engine rule.
   #
   # The engine evaluates field_matches_regex with re.search (a pattern matches
-  # anywhere in the value), so every exec.command pattern in this file starts
+  # anywhere in the value), so every command pattern in this file starts
   # with an explicit `^`: the operator must be in command position, and the two
   # patterns below then use `.*` to find it anywhere after the start.
   #
@@ -278,7 +278,7 @@ policies:
       condition:
         rule_type: field_matches_regex
         params:
-          field: exec.command
+          field: properties.command
           pattern: "^.*(>>?|tee\\s+(-a\\s+)?|\\bcp\\s+|\\bmv\\s+|\\bdd\\b.*\\bof=|\\binstall\\s+).*(/etc/|/usr/|/var/|/System/|/Library/|/boot/|(~|\\$HOME)/\\.ssh|(~|\\$HOME)/\\.aws|/Users/[^/]+/\\.(ssh|aws)|/home/[^/]+/\\.(ssh|aws))"
     severity: critical
     enforcement_point: step_execution
@@ -292,7 +292,7 @@ policies:
       condition:
         rule_type: field_matches_regex
         params:
-          field: exec.command
+          field: properties.command
           pattern: "^.*\\b(cat|less|more|head|tail|cp|mv|xxd|base64|od|strings)\\b.*\\.(env|pem|key|secret|credentials|pgpass|netrc)(\\s|$|\"|')"
     severity: critical
     enforcement_point: step_execution
@@ -306,7 +306,7 @@ policies:
       and runaway scripts. Start a new session to reset the counter.
     rule_type: execution_max_steps
     params:
-      step_type: step.exec
+      kind: step.exec
       max_steps: 50
     severity: critical
     enforcement_point: step_execution
@@ -316,25 +316,7 @@ policies:
       in between. Catches agents stuck in compile/test retry loops.
     rule_type: max_consecutive_same_type
     params:
-      step_type: step.exec
+      kind: step.exec
       max_consecutive: 10
-    severity: critical
-    enforcement_point: step_execution
-  # ==========================================================================
-  # PII SCANNING
-  # ==========================================================================
-
-  - name: "No PII in commands"
-    description: |
-      Detect common PII patterns in Bash command inputs: US Social
-      Security Numbers and credit card numbers. Prevents accidental
-      PII exposure in shell history and logs.
-
-      Customize patterns for your jurisdiction before production use.
-    rule_type: pii_in_request
-    params:
-      patterns:
-        - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
-        - "\\b\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}\\b"
     severity: critical
     enforcement_point: step_execution

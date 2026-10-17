@@ -18,13 +18,12 @@ import os
 from datetime import datetime, timezone
 
 import yaml
-
-from kyvvu_engine.engine import PolicyEngine
-from kyvvu_engine.schemas import (
+from kyvvu_engine import PolicyEngine
+from kyvvu_engine import (
     Action,
+    ActionKind,
     Behavior,
     EvalContext,
-    StepType,
     Verb,
 )
 
@@ -45,21 +44,23 @@ def load_policies() -> list[dict]:
 
 
 def make_behavior(
-    step_type: StepType,
+    kind: ActionKind,
     verb: Verb | None = None,
     *,
     step_name: str = "step",
     properties: dict | None = None,
+    output: dict | None = None,
 ) -> Behavior:
     """Build a minimal Behavior."""
     return Behavior(
         agent_id="demo-agent",
         task_id="task-1",
         timestamp=datetime.now(timezone.utc),
-        step_type=step_type,
+        kind=kind,
         verb=verb,
         step_name=step_name,
         properties=properties or {},
+        output=output,
     )
 
 
@@ -93,14 +94,14 @@ def run_clean_path(policies: list[dict]) -> None:
     ctx = make_context()
 
     # Step 1: model call.
-    b1 = make_behavior(StepType.step_model, Verb.POST, step_name="analyze_request")
+    b1 = make_behavior(ActionKind.step_model, step_name="analyze_request")
     r1 = engine.evaluate(b1, ctx)
-    print_result(1, "step.model POST", r1)
+    print_result(1, "step.model", r1)
     engine.record(b1)
 
     # Step 2: read public data (no PII classification).
     b2 = make_behavior(
-        StepType.step_resource,
+        ActionKind.step_resource,
         Verb.GET,
         step_name="read_public_api",
         properties={
@@ -114,15 +115,16 @@ def run_clean_path(policies: list[dict]) -> None:
 
     # Step 3: gate.
     gate = make_behavior(
-        StepType.step_gate,
+        ActionKind.step_gate,
         step_name="exfiltration_review",
-        properties={"guard": {"check_type": "exfiltration_review", "result": "pass"}},
+        properties={"kind": "human"},
+        output={"decision": "pass", "status": "success"},
     )
     engine.record(gate)
 
     # Step 4: outbound message.
     b3 = make_behavior(
-        StepType.step_message,
+        ActionKind.step_message,
         Verb.POST,
         step_name="send_notification",
         properties={"target": {"host": "internal.example.com"}},
@@ -142,15 +144,15 @@ def run_exfiltration_path(policies: list[dict]) -> None:
     )
 
     # Step 1: model call.
-    b1 = make_behavior(StepType.step_model, Verb.POST, step_name="analyze_request")
+    b1 = make_behavior(ActionKind.step_model, step_name="analyze_request")
     b1 = b1.model_copy(update={"task_id": "task-2"})
     r1 = engine.evaluate(b1, ctx)
-    print_result(1, "step.model POST", r1)
+    print_result(1, "step.model", r1)
     engine.record(b1)
 
     # Step 2: read sensitive data (data.classification=pii).
     b2 = make_behavior(
-        StepType.step_resource,
+        ActionKind.step_resource,
         Verb.GET,
         step_name="read_customer_db",
         properties={
@@ -165,16 +167,17 @@ def run_exfiltration_path(policies: list[dict]) -> None:
 
     # Step 3: gate (does NOT clear taint).
     gate = make_behavior(
-        StepType.step_gate,
+        ActionKind.step_gate,
         step_name="exfiltration_review",
-        properties={"guard": {"check_type": "exfiltration_review", "result": "pass"}},
+        properties={"kind": "human"},
+        output={"decision": "pass", "status": "success"},
     )
     gate = gate.model_copy(update={"task_id": "task-2"})
     engine.record(gate)
 
     # Step 4: outbound message -> BLOCKED by taint.
     b3 = make_behavior(
-        StepType.step_message,
+        ActionKind.step_message,
         Verb.POST,
         step_name="send_notification",
         properties={"target": {"host": "internal.example.com"}},

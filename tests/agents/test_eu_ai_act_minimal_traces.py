@@ -1,7 +1,8 @@
 """Agent trace tests for the EU AI Act minimal/limited risk manifest.
 
 Tests registration-time documentation policies and Article 50 transparency
-obligations (chatbot disclosure, AI-generated content marking).
+obligations (chatbot disclosure, AI-generated content marking between a
+model output and its delivery).
 """
 
 from __future__ import annotations
@@ -11,13 +12,12 @@ from datetime import datetime, timezone
 
 import pytest
 import yaml
-
 from kyvvu_engine.engine import PolicyEngine
 from kyvvu_engine.schemas import (
     Action,
+    ActionKind,
     Behavior,
     EvalContext,
-    StepType,
     Verb,
 )
 
@@ -49,21 +49,23 @@ def _ctx(risk: str = "limited") -> EvalContext:
 
 
 def _behavior(
-    step_type: StepType,
+    step_type: ActionKind,
     verb: Verb | None = None,
     *,
     step_name: str = "test_step",
     properties: dict | None = None,
+    output: dict | None = None,
 ) -> Behavior:
     """Build a minimal Behavior for evaluation."""
     return Behavior(
         agent_id="minimal-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        step_type=step_type,
+        kind=step_type,
         verb=verb,
         step_name=step_name,
         properties=properties or {},
+        output=output,
     )
 
 
@@ -148,14 +150,14 @@ class TestTransparencyObligations:
         ctx = _ctx()
         # Record a disclosure gate.
         gate = _behavior(
-            StepType.step_gate,
+            ActionKind.step_gate,
             step_name="chatbot_disclosure",
-            properties={"guard": {"result": "pass"}},
+            properties={"kind": "human"}, output={"decision": "pass"},
         )
         engine.record(gate)
         # Evaluate outbound message.
         result = engine.evaluate(
-            _behavior(StepType.step_message, Verb.POST, step_name="send_reply"),
+            _behavior(ActionKind.step_message, Verb.POST, step_name="send_reply"),
             ctx,
         )
         assert result.action == Action.allow
@@ -171,35 +173,104 @@ class TestTransparencyObligations:
         engine.load_policies(policies)
         ctx = _ctx()
         result = engine.evaluate(
-            _behavior(StepType.step_message, Verb.POST, step_name="send_reply"),
+            _behavior(ActionKind.step_message, Verb.POST, step_name="send_reply"),
             ctx,
         )
         assert result.action != Action.allow
 
-    def test_compliant_model_call_with_gate(self, policies: list[dict]) -> None:
-        """Model call with a preceding gate passes Article 50(3)."""
+    @pytest.mark.covers_policy('AI-generated content must be marked before delivery', violated=False)
+    def test_compliant_model_then_marking_gate_then_message(self, policies: list[dict]) -> None:
+        """model -> marking gate -> message POST passes Article 50(2)."""
         engine = PolicyEngine()
         engine.load_policies(policies)
         ctx = _ctx()
-        gate = _behavior(
-            StepType.step_gate,
-            step_name="content_marking",
+        engine.record(_behavior(ActionKind.step_model, step_name="generate_text"))
+        engine.record(
+            _behavior(
+                ActionKind.step_gate,
+                step_name="content_marking",
+                properties={"kind": "guardrail"},
+                output={"decision": "pass"},
+            )
         )
-        engine.record(gate)
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="generate_text"),
+            _behavior(ActionKind.step_message, Verb.POST, step_name="send_reply"),
             ctx,
         )
         assert result.action == Action.allow
 
     @pytest.mark.covers_policy('AI-generated content must be marked before delivery')
-    def test_violating_model_call_without_gate(self, policies: list[dict]) -> None:
-        """Model call without a preceding gate violates Article 50(3)."""
+    def test_violating_model_output_delivered_without_marking_gate(
+        self, policies: list[dict]
+    ) -> None:
+        """model -> message POST warns on the message step, not on the model step."""
         engine = PolicyEngine()
         engine.load_policies(policies)
         ctx = _ctx()
+        model = _behavior(ActionKind.step_model, step_name="generate_text")
+        model_result = engine.evaluate(model, ctx)
+        assert model_result.action == Action.allow
+        engine.record(model)
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="generate_text"),
+            _behavior(ActionKind.step_message, Verb.POST, step_name="send_reply"),
             ctx,
         )
-        assert result.action != Action.allow
+        assert result.action == Action.warn
+        violated = {p.name for p in result.policies if p.violated}
+        assert "AI-generated content must be marked before delivery" in violated
+
+    def test_gate_before_the_model_does_not_mark_its_output(
+        self, policies: list[dict]
+    ) -> None:
+        """A gate that precedes the model step cannot have marked its output."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx()
+        engine.record(
+            _behavior(
+                ActionKind.step_gate,
+                step_name="chatbot_disclosure",
+                properties={"kind": "human"},
+                output={"decision": "pass"},
+            )
+        )
+        engine.record(_behavior(ActionKind.step_model, step_name="generate_text"))
+        result = engine.evaluate(
+            _behavior(ActionKind.step_message, Verb.POST, step_name="send_reply"),
+            ctx,
+        )
+        violated = {p.name for p in result.policies if p.violated}
+        assert violated == {"AI-generated content must be marked before delivery"}
+
+    def test_external_resource_post_is_a_delivery(self, policies: list[dict]) -> None:
+        """Model output posted to an external target needs the marking gate too."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        ctx = _ctx()
+        engine.record(_behavior(ActionKind.step_model, step_name="generate_text"))
+        external = _behavior(
+            ActionKind.step_resource,
+            Verb.POST,
+            step_name="publish_post",
+            properties={"target": {"trust": "external"}},
+        )
+        violated = {p.name for p in engine.evaluate(external, ctx).policies if p.violated}
+        assert violated == {"AI-generated content must be marked before delivery"}
+        internal = _behavior(
+            ActionKind.step_resource,
+            Verb.POST,
+            step_name="save_draft",
+            properties={"target": {"trust": "internal"}},
+        )
+        assert engine.evaluate(internal, ctx).action == Action.allow
+
+    def test_lone_model_step_does_not_warn(self, policies: list[dict]) -> None:
+        """A model step on its own is not a delivery and triggers nothing."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        result = engine.evaluate(
+            _behavior(ActionKind.step_model, None, step_name="generate_text"),
+            _ctx(),
+        )
+        assert result.action == Action.allow
+        assert not [p for p in result.policies if p.violated]

@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Kyvvu Demo Registration Block
+#
+# DEMO FIXTURE. Exists so the hosted demo agents can show what a blocked
+# registration looks like: assign it to an agent and re-register, and the
+# agent is refused. It contains ONE critical registration policy that the
+# demo agents fail on purpose -- none of them registers a change ticket.
+#
+# This is NOT a governance recommendation. Do not assign it to an agent you
+# want to run: every agent that does not register `metadata.change_ticket`
+# is blocked at registration, and a blocked agent cannot execute.
+
+name: "Kyvvu Demo Registration Block"
+description: |
+  Demo fixture: one critical registration policy that the Kyvvu demo agents
+  fail on purpose, to show a registration being blocked. Assign it to the
+  Customer Support Router demo and click Re-register Agent to see the red
+  NON-COMPLIANT banner; unassign it and re-register to clear it. Not a
+  governance recommendation: it blocks every agent that does not register a
+  change ticket.
+
+version: "1.0.0"
+
+policies:
+  - name: "Agent must reference an approved change ticket"
+    description: |
+      Demo fixture. Requires `metadata.change_ticket` at registration, which
+      none of the demo agents supplies, so an agent this manifest is
+      assigned to is blocked at registration -- the outcome the demo exists
+      to show. In a real deployment a policy like this would tie each agent
+      release to an approved change record.
+    rule_type: field_not_empty
+    params:
+      field: metadata.change_ticket
+    severity: critical
+    enforcement_point: agent_registration

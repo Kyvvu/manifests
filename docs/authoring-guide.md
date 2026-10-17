@@ -32,7 +32,7 @@ Optional per-policy fields: `risk_classification` (scopes the policy to a specif
 The engine has 26 registered rules. To list them:
 
 ```python
-from kyvvu_engine.rules import PolicyRule
+from kyvvu_engine import PolicyRule
 
 rules = PolicyRule.get_all_rules()
 for name, meta in sorted(rules.items()):
@@ -45,6 +45,8 @@ for name, meta in sorted(rules.items()):
 
 Every `params` block must match the rule's `params_schema`. Required params must be present; unknown keys are rejected by the test suite.
 
+Regexes in `field_matches_regex.pattern` use RE2 syntax. Lookaround and backreferences are rejected when the policy loads. Use `not` around a positive `field_matches_regex` condition to invert a match.
+
 ```python
 rules = PolicyRule.get_all_rules()
 print(rules["step_requires_gate"]["params_schema"])
@@ -55,7 +57,9 @@ print(rules["step_requires_gate"]["params_schema"])
 | Enforcement point | When evaluated | Data available |
 |-------------------|---------------|----------------|
 | `agent_registration` | When an agent registers or updates | Agent profile fields: `name`, `purpose`, `risk_classification`, `owner_id`, `maintainer_id`, `declared_tools` |
-| `step_execution` | Before every agent action at runtime | Current step (`step_type`, `verb`, `step_name`, `properties`, `input`) plus full task history |
+| `step_execution` | Before every agent action at runtime | Current step (`kind`, `verb`, `step_name`, `properties`, `input`) plus full task history |
+
+Any param named `field`, including `trigger_condition.field`, is a full path from the enforcement view. For step rules use `kind`, `verb`, `step_name`, `input.<path>`, or `properties.<path>`; for registration rules use an agent profile attribute such as `purpose` or `metadata.team`. Params beginning with `property_` stay relative to step properties, so `property_path: usage.total_tokens` has no `properties.` prefix.
 
 ## Severity levels
 
@@ -74,14 +78,15 @@ Only `critical` severity produces a `block` action. All other severities produce
 
 ### Gate-before-action
 
-Require a `step.gate` with a specific `check_type` before certain step types:
+Require a completed `step.gate` with `properties.kind: human` and
+`output.decision: pass` before certain action kinds:
 
 ```yaml
 rule_type: step_requires_gate
 params:
-  target_step_types: ["step.resource"]
+  target_kinds: ["step.resource"]
   target_verb: DELETE
-  gate_check_type: human_approval
+  gate_kind: human
 ```
 
 ### Taint tracking
@@ -91,11 +96,11 @@ Permanently block target steps after a taint step appears in history:
 ```yaml
 rule_type: tainted_path_block
 params:
-  taint_step_type: step.resource
+  taint_kind: step.resource
   taint_verb: GET
   taint_property_filter:
     data.classification: pii
-  target_step_types: ["step.message"]
+  target_kinds: ["step.message"]
   target_verb: POST
 ```
 
@@ -114,10 +119,11 @@ params:
       conditions:
         - rule_type: current_is
           params:
-            step_type: step.exec
+            kind: step.exec
         - rule_type: history_contains
           params:
-            step_type: step.resource
+            kind: step.resource
+            count_attempts: true
             verb: GET
             property_filter:
               target.trust: external
@@ -131,7 +137,7 @@ Fail-closed enforcement — agents without a declared allowlist are blocked:
 rule_type: step_name_in_allowlist
 params:
   agent_field: declared_tools
-  target_step_types: ["step.resource", "step.exec"]
+  target_kinds: ["step.resource", "step.exec"]
 ```
 
 ## Testing workflow

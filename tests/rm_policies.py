@@ -58,7 +58,7 @@ def _load_rm_patterns() -> list[tuple[str, str]]:
         if condition.get("rule_type") != "field_matches_regex":
             continue
         cond_params = condition.get("params", {})
-        if cond_params.get("field") != "exec.command":
+        if cond_params.get("field") != "properties.command":
             continue
         patterns.append((policy["name"], cond_params["pattern"]))
     return patterns

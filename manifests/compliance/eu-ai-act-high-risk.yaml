@@ -24,7 +24,7 @@ description: |
   Policies without a risk_classification field apply to all agents.
   Policies with risk_classification: high apply only to HIGH risk agents.
 
-version: "1.0.0"
+version: "1.0.2"
 
 policies:
   # ==========================================================================
@@ -135,15 +135,15 @@ policies:
     description: |
       EU AI Act Article 14(4)(c) requires oversight measures including the
       ability to interrupt the AI system. Write operations (POST) that modify
-      external state require a step.gate with human_approval check_type
-      immediately preceding the action.
+      external state require an earlier completed step.gate with
+      properties.kind human and output.decision pass.
 
       Applies to: HIGH risk agents only.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.resource", "step.message"]
+      target_kinds: ["step.resource", "step.message"]
       target_verb: POST
-      gate_check_type: human_approval
+      gate_kind: human
     severity: critical
     enforcement_point: step_execution
     risk_classification: high
@@ -157,9 +157,9 @@ policies:
       Applies to: HIGH risk agents only.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.resource"]
+      target_kinds: ["step.resource"]
       target_verb: DELETE
-      gate_check_type: human_approval
+      gate_kind: human
     severity: critical
     enforcement_point: step_execution
     risk_classification: high
@@ -178,8 +178,8 @@ policies:
       Applies to: HIGH risk agents only.
     rule_type: step_requires_predecessor
     params:
-      required_step_type: step.gate
-      target_step_types: ["step.model"]
+      required_kind: step.gate
+      target_kinds: ["step.model"]
     severity: high
     enforcement_point: step_execution
     risk_classification: high
@@ -198,7 +198,7 @@ policies:
       Applies to: ALL risk classifications.
     rule_type: execution_max_steps
     params:
-      step_type: step.resource
+      kind: step.resource
       max_steps: 50
     severity: high
     enforcement_point: step_execution
@@ -211,7 +211,7 @@ policies:
       Applies to: ALL risk classifications.
     rule_type: execution_max_steps
     params:
-      step_type: step.model
+      kind: step.model
       max_steps: 30
     severity: high
     enforcement_point: step_execution

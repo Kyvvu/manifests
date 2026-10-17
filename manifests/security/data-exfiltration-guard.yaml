@@ -23,10 +23,9 @@ description: |
   1. Tainted path block (history-aware, permanent)
   2. Gate before external sends (structural)
   3. Domain allowlist (network boundary)
-  4. PII pattern scanning (content inspection)
-  5. Credential-to-message sequence prohibition (path-aware)
+  4. Credential-to-message sequence prohibition (path-aware)
 
-version: "1.0.0"
+version: "1.0.4"
 
 policies:
   # ==========================================================================
@@ -49,11 +48,11 @@ policies:
       earlier in the task.
     rule_type: tainted_path_block
     params:
-      taint_step_type: step.resource
+      taint_kind: step.resource
       taint_verb: GET
       taint_property_filter:
         data.classification: pii
-      target_step_types: ["step.message", "step.resource"]
+      target_kinds: ["step.message", "step.resource"]
       target_verb: POST
     severity: critical
     enforcement_point: step_execution
@@ -69,8 +68,8 @@ policies:
       sensitive read) but the message content may still be risky.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.message"]
-      gate_check_type: exfiltration_review
+      target_kinds: ["step.message"]
+      gate_kind: human
     severity: critical
     enforcement_point: step_execution
   # ==========================================================================
@@ -87,41 +86,22 @@ policies:
     rule_type: domain_allowlist
     params:
       allowed_domains: ["internal.example.com", "api.example.com"]
-      target_step_types: ["step.resource"]
+      target_kinds: ["step.resource"]
     severity: critical
     enforcement_point: step_execution
   # ==========================================================================
-  # LAYER 4: CONTENT INSPECTION
-  # ==========================================================================
-
-  - name: "Scan outbound payloads for PII patterns"
-    description: |
-      Content-level PII detection in outbound request payloads. Scans
-      for US Social Security Numbers, Dutch BSN (Citizen Service
-      Numbers), and email addresses.
-
-      IMPORTANT: Customize patterns for your jurisdiction and data
-      types before production use.
-    rule_type: pii_in_request
-    params:
-      patterns:
-        - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
-        - "\\b\\d{9}\\b"
-        - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
-    severity: critical
-    enforcement_point: step_execution
-  # ==========================================================================
-  # LAYER 5: SEQUENCE PROHIBITION
+  # LAYER 4: CREDENTIAL READ TAINT
   # ==========================================================================
 
   - name: "Forbid credential read followed by external send"
     description: |
-      Prohibits the sequence step.credential -> step.message anywhere
-      in the task history. If an agent reads credentials and then
-      attempts an outbound message, the path is blocked. This prevents
+      Blocks a step.message after any step.credential GET in the task
+      history. A credential write does not taint the path. This prevents
       credential exfiltration via indirect prompt injection.
-    rule_type: sequence_forbidden
+    rule_type: tainted_path_block
     params:
-      forbidden_sequence: ["step.credential", "step.message"]
+      taint_kind: step.credential
+      taint_verb: GET
+      target_kinds: ["step.message"]
     severity: critical
     enforcement_point: step_execution

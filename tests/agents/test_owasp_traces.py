@@ -12,13 +12,12 @@ from datetime import datetime, timezone
 
 import pytest
 import yaml
-
 from kyvvu_engine.engine import PolicyEngine
 from kyvvu_engine.schemas import (
     Action,
+    ActionKind,
     Behavior,
     EvalContext,
-    StepType,
     Verb,
 )
 
@@ -54,21 +53,23 @@ def _ctx(
 
 
 def _behavior(
-    step_type: StepType,
+    step_type: ActionKind,
     verb: Verb | None = None,
     *,
     step_name: str = "test_step",
     properties: dict | None = None,
+    output: dict | None = None,
 ) -> Behavior:
     """Build a minimal Behavior for evaluation."""
     return Behavior(
         agent_id="owasp-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        step_type=step_type,
+        kind=step_type,
         verb=verb,
         step_name=step_name,
         properties=properties or {},
+        output=output,
     )
 
 
@@ -108,12 +109,7 @@ class TestRegistration:
 
     @pytest.mark.covers_policy('Agent must declare a tool allowlist')
     def test_violating_missing_declared_tools(self, policies: list[dict]) -> None:
-        """A missing declared_tools field violates the tool-allowlist policy.
-
-        ``field_not_empty`` treats only ``None``/``""`` as empty (an empty list
-        passes), so the deny path is an undeclared field — which is the real
-        "agent never declared its tools" case this policy guards.
-        """
+        """A missing declared_tools field violates the tool-allowlist policy."""
         engine = PolicyEngine()
         engine.load_policies(policies)
         profile = {
@@ -128,6 +124,19 @@ class TestRegistration:
         )
 
 
+    @pytest.mark.covers_policy('Agent must declare a tool allowlist')
+    def test_violating_empty_declared_tools(self, policies: list[dict]) -> None:
+        """An empty declared_tools list declares no tools and violates too (#818)."""
+        engine = PolicyEngine()
+        engine.load_policies(policies)
+        profile = {**self._VALID_PROFILE, "declared_tools": []}
+        result = engine.evaluate_registration(profile, _ctx())
+        assert result.action != Action.allow
+        assert [p.name for p in result.policies if p.violated] == [
+            "Agent must declare a tool allowlist"
+        ]
+
+
 class TestToolAllowlist:
     """step_name_in_allowlist: blocks tool calls not in declared_tools."""
 
@@ -139,13 +148,13 @@ class TestToolAllowlist:
         # Record a gate first so gate-requiring policies don't interfere.
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="approval",
-                properties={"guard": {"result": "pass"}},
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.GET, step_name="search_web"),
+            _behavior(ActionKind.step_resource, Verb.GET, step_name="search_web"),
             ctx,
         )
         assert result.action == Action.allow
@@ -157,7 +166,7 @@ class TestToolAllowlist:
         engine.load_policies(policies)
         ctx = _ctx(agent_allowed_tools=["search_web"])
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.GET, step_name="exfiltrate_data"),
+            _behavior(ActionKind.step_resource, Verb.GET, step_name="exfiltrate_data"),
             ctx,
         )
         assert result.action == Action.block
@@ -172,13 +181,13 @@ class TestCodeExecutionGate:
         engine.load_policies(policies)
         ctx = _ctx(agent_allowed_tools=["run_script"])
         gate = _behavior(
-            StepType.step_gate,
+            ActionKind.step_gate,
             step_name="code_review",
-            properties={"guard": {"result": "pass"}},
+            properties={"kind": "human"}, output={"decision": "pass"},
         )
         engine.record(gate)
         result = engine.evaluate(
-            _behavior(StepType.step_exec, step_name="run_script"),
+            _behavior(ActionKind.step_exec, step_name="run_script"),
             ctx,
         )
         assert result.action == Action.allow
@@ -190,7 +199,7 @@ class TestCodeExecutionGate:
         engine.load_policies(policies)
         ctx = _ctx(agent_allowed_tools=["run_script"])
         result = engine.evaluate(
-            _behavior(StepType.step_exec, step_name="run_script"),
+            _behavior(ActionKind.step_exec, step_name="run_script"),
             ctx,
         )
         assert result.action == Action.block
@@ -205,13 +214,13 @@ class TestDestructiveOperationGate:
         engine.load_policies(policies)
         ctx = _ctx(agent_allowed_tools=["delete_file"])
         gate = _behavior(
-            StepType.step_gate,
+            ActionKind.step_gate,
             step_name="delete_approval",
-            properties={"guard": {"result": "pass"}},
+            properties={"kind": "human"}, output={"decision": "pass"},
         )
         engine.record(gate)
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.DELETE, step_name="delete_file"),
+            _behavior(ActionKind.step_resource, Verb.DELETE, step_name="delete_file"),
             ctx,
         )
         assert result.action == Action.allow
@@ -223,7 +232,7 @@ class TestDestructiveOperationGate:
         engine.load_policies(policies)
         ctx = _ctx(agent_allowed_tools=["delete_file"])
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.DELETE, step_name="delete_file"),
+            _behavior(ActionKind.step_resource, Verb.DELETE, step_name="delete_file"),
             ctx,
         )
         assert result.action == Action.block
@@ -243,7 +252,7 @@ class TestExternalContentTaint:
         # Step 1: fetch external content.
         engine.record(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="fetch_url",
                 properties={"target": {"trust": "external"}},
@@ -252,14 +261,14 @@ class TestExternalContentTaint:
         # Step 2: fresh gate immediately before exec.
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="fresh_approval",
-                properties={"guard": {"result": "pass"}},
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         # Step 3: exec — gate is immediate predecessor, so taint policy passes.
         result = engine.evaluate(
-            _behavior(StepType.step_exec, step_name="run_script"),
+            _behavior(ActionKind.step_exec, step_name="run_script"),
             ctx,
         )
         assert result.action == Action.allow
@@ -275,7 +284,7 @@ class TestExternalContentTaint:
         # Step 1: fetch external content.
         engine.record(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 Verb.GET,
                 step_name="fetch_url",
                 properties={"target": {"trust": "external"}},
@@ -283,7 +292,7 @@ class TestExternalContentTaint:
         )
         # Step 2: exec without a fresh gate — taint policy blocks.
         result = engine.evaluate(
-            _behavior(StepType.step_exec, step_name="run_script"),
+            _behavior(ActionKind.step_exec, step_name="run_script"),
             ctx,
         )
         assert result.action == Action.block
@@ -298,13 +307,13 @@ class TestExternalContentTaint:
         # Only a gate, no external fetch — taint conditions not all met.
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="approval",
-                properties={"guard": {"result": "pass"}},
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         result = engine.evaluate(
-            _behavior(StepType.step_exec, step_name="run_script"),
+            _behavior(ActionKind.step_exec, step_name="run_script"),
             ctx,
         )
         assert result.action == Action.allow
@@ -319,7 +328,7 @@ class TestRunawayPrevention:
         engine.load_policies(policies)
         ctx = _ctx(agent_allowed_tools=["fetch_data"])
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.GET, step_name="fetch_data"),
+            _behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data"),
             ctx,
         )
         assert result.action == Action.allow
@@ -332,10 +341,10 @@ class TestRunawayPrevention:
         ctx = _ctx(agent_allowed_tools=["fetch_data"])
         for _ in range(50):
             engine.record(
-                _behavior(StepType.step_resource, Verb.GET, step_name="fetch_data")
+                _behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data")
             )
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.GET, step_name="fetch_data"),
+            _behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data"),
             ctx,
         )
         assert result.action != Action.allow

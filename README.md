@@ -11,10 +11,12 @@ A manifest is a YAML bundle of policies — security, safety, and compliance —
 | `gdpr-data-subject-rights` | `compliance/` | Registration + Step | GDPR Art. 5, 13, 17, 22 |
 | `healthcare-nen7510-hipaa` | `compliance/` | Registration + Step | NEN 7510, HIPAA |
 | `financial-services-dora-mifid` | `compliance/` | Registration + Step | DORA, MiFID II |
+| `claude-code-safety` | `developer/` | Step | Claude Code safety |
 | `owasp-agentic-default` | `security/` | Registration + Step | OWASP Agentic Top 10 (2026) |
 | `data-exfiltration-guard` | `security/` | Step | Data loss prevention |
 | `internal-ai-starter` | `operational/` | Registration + Step | General responsible AI |
 | `demo` | `operational/` | Registration + Step | Getting started |
+| `demo-registration-block` | `operational/` | Registration | Demo fixture: blocks registration on purpose |
 
 ## Quickstart
 
@@ -60,9 +62,9 @@ policies:
       Destructive operations must be preceded by a human approval gate.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.resource"]
+      target_kinds: ["step.resource"]
       target_verb: DELETE
-      gate_check_type: human_approval
+      gate_kind: human
     severity: critical
     enforcement_point: step_execution
 ```
@@ -82,21 +84,21 @@ Path-dependent rules available in the engine:
 | Rule | What it does |
 |------|-------------|
 | `tainted_path_block` | Permanently blocks target steps after a taint step appears in history |
-| `step_requires_gate` | Requires a gate step (with optional check_type) anywhere in history |
-| `step_preceded_by_without_intervening` | Requires a predecessor with no forbidden step types between |
+| `step_requires_gate` | Requires a completed gate with the configured `output.decision` (`pass` by default), optionally filtered by `properties.kind`, in task history |
+| `step_preceded_by_without_intervening` | Requires a predecessor with no forbidden kinds between |
 | `step_requires_dedicated_predecessor` | Each target consumes its own predecessor (one gate, one action) |
-| `history_contains` | Checks whether a specific step type exists in history |
-| `sequence_forbidden` | Blocks a forbidden ordered sequence of step types |
+| `history_contains` | Checks whether a specific kind exists in history; required `count_attempts` chooses whether blocked attempts count |
+| `sequence_forbidden` | Blocks a forbidden ordered sequence of kinds |
 | `usage_budget` | Tracks cumulative property values across the task |
-| `execution_max_steps` | Caps the count of a step type within a task |
-| `max_consecutive_same_type` | Limits consecutive occurrences of a step type |
+| `execution_max_steps` | Caps the count of one kind within a task |
+| `max_consecutive_same_type` | Limits consecutive occurrences of the same kind |
 
 ## How this repository is maintained
 
 This repository is **generated output**. It mirrors the `kyvvu-manifests-public/`
-directory of Kyvvu's private `platform` repository, and every sync replaces the
-whole tree — `git rm -rf .`, then an rsync — excluding only `.git/` and
-`.github/workflows/`.
+directory of Kyvvu's private `platform` repository, synced on each production
+release of the platform, and every sync replaces the whole tree — `git rm -rf .`,
+then an rsync — excluding only `.git/` and `.github/workflows/`.
 
 So anything committed here directly is deleted at the next sync. That includes a
 merged pull request, and it has already happened once: a `.gitignore` added here

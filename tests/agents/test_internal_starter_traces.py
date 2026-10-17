@@ -7,13 +7,12 @@ from datetime import datetime, timezone
 
 import pytest
 import yaml
-
 from kyvvu_engine.engine import PolicyEngine
 from kyvvu_engine.schemas import (
     Action,
+    ActionKind,
     Behavior,
     EvalContext,
-    StepType,
     Verb,
 )
 
@@ -45,20 +44,22 @@ def _ctx(*, agent_allowed_tools: list[str] | None = None) -> EvalContext:
 
 
 def _behavior(
-    step_type: StepType,
+    step_type: ActionKind,
     verb: Verb | None = None,
     *,
     step_name: str = "test_step",
     properties: dict | None = None,
+    output: dict | None = None,
 ) -> Behavior:
     return Behavior(
         agent_id="starter-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        step_type=step_type,
+        kind=step_type,
         verb=verb,
         step_name=step_name,
         properties=properties or {},
+        output=output,
     )
 
 
@@ -98,7 +99,7 @@ class TestToolAllowlist:
         engine.load_policies(policies)
         ctx = _ctx(agent_allowed_tools=["fetch_data", "send_email"])
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.GET, step_name="fetch_data"),
+            _behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data"),
             ctx,
         )
         assert result.action == Action.allow
@@ -109,7 +110,7 @@ class TestToolAllowlist:
         engine.load_policies(policies)
         ctx = _ctx(agent_allowed_tools=["fetch_data", "send_email"])
         result = engine.evaluate(
-            _behavior(StepType.step_exec, step_name="execute_code"),
+            _behavior(ActionKind.step_exec, step_name="execute_code"),
             ctx,
         )
         assert result.action == Action.block
@@ -120,7 +121,7 @@ class TestToolAllowlist:
         engine.load_policies(policies)
         ctx = _ctx(agent_allowed_tools=None)
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.GET, step_name="fetch_data"),
+            _behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data"),
             ctx,
         )
         assert result.action == Action.block
@@ -137,16 +138,16 @@ class TestTokenBudget:
         ctx = _ctx(agent_allowed_tools=["call_llm", "fetch_data"])
         engine.record(
             _behavior(
-                StepType.step_model,
-                Verb.POST,
+                ActionKind.step_model,
+                None,
                 step_name="call_llm",
                 properties={"usage": {"total_tokens": 40000}},
             )
         )
         result = engine.evaluate(
             _behavior(
-                StepType.step_model,
-                Verb.POST,
+                ActionKind.step_model,
+                None,
                 step_name="call_llm",
                 properties={"usage": {"total_tokens": 5000}},
             ),
@@ -166,25 +167,25 @@ class TestTokenBudget:
         # non-model step so the consecutive-loop rule does not also trip).
         engine.record(
             _behavior(
-                StepType.step_model,
-                Verb.POST,
+                ActionKind.step_model,
+                None,
                 step_name="call_llm",
                 properties={"usage": {"total_tokens": 60000}},
             )
         )
-        engine.record(_behavior(StepType.step_resource, Verb.GET, step_name="fetch_data"))
+        engine.record(_behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data"))
         engine.record(
             _behavior(
-                StepType.step_model,
-                Verb.POST,
+                ActionKind.step_model,
+                None,
                 step_name="call_llm",
                 properties={"usage": {"total_tokens": 60000}},
             )
         )
         result = engine.evaluate(
             _behavior(
-                StepType.step_model,
-                Verb.POST,
+                ActionKind.step_model,
+                None,
                 step_name="call_llm",
                 properties={"usage": {"total_tokens": 1000}},
             ),
@@ -205,13 +206,13 @@ class TestDestructiveGate:
         ctx = _ctx(agent_allowed_tools=["delete_record"])
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="approval",
-                properties={"guard": {"check_type": "human_approval", "result": "pass"}},
+                properties={"kind": "human"}, output={"decision": "pass"},
             )
         )
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.DELETE, step_name="delete_record"),
+            _behavior(ActionKind.step_resource, Verb.DELETE, step_name="delete_record"),
             ctx,
         )
         assert not any(
@@ -224,7 +225,7 @@ class TestDestructiveGate:
         engine.load_policies(policies)
         ctx = _ctx(agent_allowed_tools=["delete_record"])
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.DELETE, step_name="delete_record"),
+            _behavior(ActionKind.step_resource, Verb.DELETE, step_name="delete_record"),
             ctx,
         )
         assert result.action == Action.block
@@ -248,13 +249,13 @@ class TestLlmCallLimit:
         ctx = _ctx(agent_allowed_tools=["call_llm", "fetch_data"])
         for _ in range(50):
             engine.record(
-                _behavior(StepType.step_model, Verb.POST, step_name="call_llm")
+                _behavior(ActionKind.step_model, None, step_name="call_llm")
             )
             engine.record(
-                _behavior(StepType.step_resource, Verb.GET, step_name="fetch_data")
+                _behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data")
             )
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="call_llm"),
+            _behavior(ActionKind.step_model, None, step_name="call_llm"),
             ctx,
         )
         assert result.action == Action.block
@@ -273,10 +274,10 @@ class TestConsecutiveLimit:
         ctx = _ctx(agent_allowed_tools=["call_llm"])
         for _ in range(4):
             engine.record(
-                _behavior(StepType.step_model, Verb.POST, step_name="call_llm")
+                _behavior(ActionKind.step_model, None, step_name="call_llm")
             )
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="call_llm"),
+            _behavior(ActionKind.step_model, None, step_name="call_llm"),
             ctx,
         )
         assert result.action == Action.allow
@@ -288,10 +289,10 @@ class TestConsecutiveLimit:
         ctx = _ctx(agent_allowed_tools=["call_llm"])
         for _ in range(5):
             engine.record(
-                _behavior(StepType.step_model, Verb.POST, step_name="call_llm")
+                _behavior(ActionKind.step_model, None, step_name="call_llm")
             )
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="call_llm"),
+            _behavior(ActionKind.step_model, None, step_name="call_llm"),
             ctx,
         )
         assert result.action == Action.block

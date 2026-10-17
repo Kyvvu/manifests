@@ -11,13 +11,12 @@ from datetime import datetime, timezone
 
 import pytest
 import yaml
-
 from kyvvu_engine.engine import PolicyEngine
 from kyvvu_engine.schemas import (
     Action,
+    ActionKind,
     Behavior,
     EvalContext,
-    StepType,
     Verb,
 )
 
@@ -49,21 +48,23 @@ def _ctx(risk: str = "high") -> EvalContext:
 
 
 def _behavior(
-    step_type: StepType,
+    step_type: ActionKind,
     verb: Verb | None = None,
     *,
     step_name: str = "test_step",
     properties: dict | None = None,
+    output: dict | None = None,
 ) -> Behavior:
     """Build a minimal Behavior for evaluation."""
     return Behavior(
         agent_id="high-risk-agent",
         task_id="task-1",
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        step_type=step_type,
+        kind=step_type,
         verb=verb,
         step_name=step_name,
         properties=properties or {},
+        output=output,
     )
 
 
@@ -145,13 +146,13 @@ class TestDataQualityGate:
         ctx = _ctx()
         engine.record(
             _behavior(
-                StepType.step_gate,
+                ActionKind.step_gate,
                 step_name="data_quality_check",
-                properties={"guard": {"check_type": "data_quality", "result": "pass"}},
+                properties={"kind": "guardrail"}, output={"decision": "pass"},
             )
         )
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="score_applicant"),
+            _behavior(ActionKind.step_model, None, step_name="score_applicant"),
             ctx,
         )
         assert not any(
@@ -166,7 +167,7 @@ class TestDataQualityGate:
         engine.load_policies(policies)
         ctx = _ctx()
         result = engine.evaluate(
-            _behavior(StepType.step_model, Verb.POST, step_name="score_applicant"),
+            _behavior(ActionKind.step_model, None, step_name="score_applicant"),
             ctx,
         )
         assert result.action != Action.allow
@@ -186,13 +187,13 @@ class TestHumanOversight:
         ctx = _ctx()
         # Record a human approval gate.
         gate = _behavior(
-            StepType.step_gate,
+            ActionKind.step_gate,
             step_name="human_approval",
-            properties={"guard": {"check_type": "human_approval", "result": "pass"}},
+            properties={"kind": "human"}, output={"decision": "pass"},
         )
         engine.record(gate)
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.POST, step_name="update_record"),
+            _behavior(ActionKind.step_resource, Verb.POST, step_name="update_record"),
             ctx,
         )
         assert result.action == Action.allow
@@ -204,7 +205,7 @@ class TestHumanOversight:
         engine.load_policies(policies)
         ctx = _ctx()
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.POST, step_name="update_record"),
+            _behavior(ActionKind.step_resource, Verb.POST, step_name="update_record"),
             ctx,
         )
         assert result.action == Action.block
@@ -215,13 +216,13 @@ class TestHumanOversight:
         engine.load_policies(policies)
         ctx = _ctx()
         gate = _behavior(
-            StepType.step_gate,
+            ActionKind.step_gate,
             step_name="human_approval",
-            properties={"guard": {"check_type": "human_approval", "result": "pass"}},
+            properties={"kind": "human"}, output={"decision": "pass"},
         )
         engine.record(gate)
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.DELETE, step_name="delete_record"),
+            _behavior(ActionKind.step_resource, Verb.DELETE, step_name="delete_record"),
             ctx,
         )
         assert result.action == Action.allow
@@ -233,7 +234,7 @@ class TestHumanOversight:
         engine.load_policies(policies)
         ctx = _ctx()
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.DELETE, step_name="delete_record"),
+            _behavior(ActionKind.step_resource, Verb.DELETE, step_name="delete_record"),
             ctx,
         )
         assert result.action == Action.block
@@ -248,7 +249,7 @@ class TestRobustness:
         engine.load_policies(policies)
         ctx = _ctx()
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.GET, step_name="fetch_data"),
+            _behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data"),
             ctx,
         )
         # GET on step.resource with no gate — only the gate policies
@@ -264,10 +265,10 @@ class TestRobustness:
         ctx = _ctx()
         for _ in range(50):
             engine.record(
-                _behavior(StepType.step_resource, Verb.GET, step_name="fetch_data")
+                _behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data")
             )
         result = engine.evaluate(
-            _behavior(StepType.step_resource, Verb.GET, step_name="fetch_data"),
+            _behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data"),
             ctx,
         )
         assert result.action != Action.allow

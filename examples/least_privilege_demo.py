@@ -18,13 +18,12 @@ import os
 from datetime import datetime, timezone
 
 import yaml
-
-from kyvvu_engine.engine import PolicyEngine
-from kyvvu_engine.schemas import (
+from kyvvu_engine import PolicyEngine
+from kyvvu_engine import (
     Action,
+    ActionKind,
     Behavior,
     EvalContext,
-    StepType,
     Verb,
 )
 
@@ -45,14 +44,14 @@ def load_policies() -> list[dict]:
 
 
 def make_behavior(
-    step_type: StepType, verb: Verb | None, *, step_name: str
+    kind: ActionKind, verb: Verb | None, *, step_name: str
 ) -> Behavior:
     """Build a minimal Behavior."""
     return Behavior(
         agent_id="demo-agent",
         task_id="task-1",
         timestamp=datetime.now(timezone.utc),
-        step_type=step_type,
+        kind=kind,
         verb=verb,
         step_name=step_name,
     )
@@ -83,7 +82,7 @@ def main() -> None:
         agent_allowed_tools=["fetch_data", "send_email"],
     )
     r = engine.evaluate(
-        make_behavior(StepType.step_resource, Verb.GET, step_name="fetch_data"),
+        make_behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data"),
         ctx,
     )
     print_result('step_name="fetch_data" (in allowlist)', r)
@@ -100,7 +99,7 @@ def main() -> None:
         agent_allowed_tools=["fetch_data", "send_email"],
     )
     r = engine.evaluate(
-        make_behavior(StepType.step_exec, None, step_name="execute_code"),
+        make_behavior(ActionKind.step_exec, None, step_name="execute_code"),
         ctx,
     )
     print_result('step_name="execute_code" (NOT in allowlist)', r)
@@ -117,7 +116,7 @@ def main() -> None:
         agent_allowed_tools=None,
     )
     r = engine.evaluate(
-        make_behavior(StepType.step_resource, Verb.GET, step_name="fetch_data"),
+        make_behavior(ActionKind.step_resource, Verb.GET, step_name="fetch_data"),
         ctx,
     )
     print_result('step_name="fetch_data" (no allowlist)', r)

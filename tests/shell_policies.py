@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Match/no-match fixture for the shell write / secret-read stopgap policies.
 
-The ``claude-code-safety.yaml`` manifest gains two ``exec.command`` regex
+The ``claude-code-safety.yaml`` manifest gains two ``properties.command`` regex
 policies (#239 Layer A) that close the most common Bash write/secret-read
 vectors directly on the command string:
 
@@ -11,7 +11,7 @@ vectors directly on the command string:
     strings of .env/.pem/.key/credentials/pgpass/netrc files.
 
 Both mirror the destructive-delete pattern (``not`` over ``field_matches_regex``
-on ``exec.command``) and use the existing engine rule — no new rule functions.
+on ``properties.command``) and use the existing engine rule — no new rule functions.
 
 The patterns are exercised exactly as the engine evaluates them: the
 ``field_matches_regex`` rule uses ``re.search(pattern, text, re.DOTALL)``
@@ -69,7 +69,7 @@ def _load_shell_patterns() -> dict[str, str]:
         if condition.get("rule_type") != "field_matches_regex":
             continue
         cond_params = condition.get("params", {})
-        if cond_params.get("field") != "exec.command":
+        if cond_params.get("field") != "properties.command":
             continue
         patterns[policy["name"]] = cond_params["pattern"]
     return patterns

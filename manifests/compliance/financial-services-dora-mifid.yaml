@@ -19,7 +19,7 @@ description: |
   (path-dependent enforcement), approval integrity without LLM
   interference, LLM call limits, and working-hours restrictions.
 
-version: "1.0.0"
+version: "1.0.2"
 
 policies:
   # ==========================================================================
@@ -81,9 +81,9 @@ policies:
       obligations are met.
     rule_type: step_requires_gate
     params:
-      target_step_types: ["step.resource"]
+      target_kinds: ["step.resource"]
       target_verb: POST
-      gate_check_type: human_approval
+      gate_kind: human
     severity: critical
     enforcement_point: step_execution
   - name: "Market data read taints downstream trade execution"
@@ -103,11 +103,11 @@ policies:
       data provider domain.
     rule_type: tainted_path_block
     params:
-      taint_step_type: step.resource
+      taint_kind: step.resource
       taint_verb: GET
       taint_property_filter:
         target.host: market-data.example.com
-      target_step_types: ["step.resource"]
+      target_kinds: ["step.resource"]
       target_verb: POST
     severity: critical
     enforcement_point: step_execution
@@ -120,9 +120,9 @@ policies:
       action.
     rule_type: step_preceded_by_without_intervening
     params:
-      required_step_type: step.gate
+      required_kind: step.gate
       forbidden_intervening: ["step.model"]
-      target_step_types: ["step.resource"]
+      target_kinds: ["step.resource"]
       target_verb: POST
     severity: critical
     enforcement_point: step_execution
@@ -133,7 +133,7 @@ policies:
       resource consumption.
     rule_type: execution_max_steps
     params:
-      step_type: step.model
+      kind: step.model
       max_steps: 20
     severity: high
     enforcement_point: step_execution

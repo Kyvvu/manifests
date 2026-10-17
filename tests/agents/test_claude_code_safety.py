@@ -7,9 +7,8 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from kyvvu_engine import PolicyEngine
-from kyvvu_engine.schemas import Action, Behavior, EvalContext, StepType, Verb
+from kyvvu_engine.schemas import Action, ActionKind, Behavior, EvalContext, Verb
 
 MANIFEST_PATH = (
     Path(__file__).parent.parent.parent
@@ -37,19 +36,19 @@ def _ctx(**kwargs: object) -> EvalContext:
 
 
 def _behavior(
-    step_type: StepType,
+    step_type: ActionKind,
     step_name: str = "test",
     verb: Verb | None = None,
     properties: dict | None = None,
     task_id: str = "t1",
-    step: int = 1,
+    seq: int = 1,
     input_data: dict | None = None,
 ) -> Behavior:
     return Behavior(
         agent_id="test",
         task_id=task_id,
-        step=step,
-        step_type=step_type,
+        seq=seq,
+        kind=step_type,
         verb=verb,
         step_name=step_name,
         properties=properties or {},
@@ -66,8 +65,8 @@ class TestDestructiveCommandProtection:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
-                properties={"exec": {"command": "ls -la"}},
+                ActionKind.step_exec,
+                properties={"command": "ls -la"},
             ),
             _ctx(),
         )
@@ -79,8 +78,8 @@ class TestDestructiveCommandProtection:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
-                properties={"exec": {"command": "cat secrets.env"}},
+                ActionKind.step_exec,
+                properties={"command": "cat secrets.env"},
             ),
             _ctx(),
         )
@@ -95,8 +94,8 @@ class TestDestructiveCommandProtection:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
-                properties={"exec": {"command": "git push --force origin main"}},
+                ActionKind.step_exec,
+                properties={"command": "git push --force origin main"},
             ),
             _ctx(),
         )
@@ -110,8 +109,8 @@ class TestDestructiveCommandProtection:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
-                properties={"exec": {"command": "rm -rf /"}},
+                ActionKind.step_exec,
+                properties={"command": "rm -rf /"},
             ),
             _ctx(),
         )
@@ -132,7 +131,7 @@ class TestDestructiveCommandProtection:
         )
         for command, name in cases:
             result = engine.evaluate(
-                _behavior(StepType.step_exec, properties={"exec": {"command": command}}),
+                _behavior(ActionKind.step_exec, properties={"command": command}),
                 _ctx(),
             )
             assert any(p.name == name and p.violated for p in result.policies), command
@@ -143,8 +142,8 @@ class TestDestructiveCommandProtection:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
-                properties={"exec": {"command": "git reset --hard"}},
+                ActionKind.step_exec,
+                properties={"command": "git reset --hard"},
             ),
             _ctx(),
         )
@@ -158,8 +157,8 @@ class TestDestructiveCommandProtection:
         for cmd in ("cd repo && git push --force", "sudo rm -rf /", "build; git reset --hard"):
             result = engine.evaluate(
                 _behavior(
-                    StepType.step_exec,
-                    properties={"exec": {"command": cmd}},
+                    ActionKind.step_exec,
+                    properties={"command": cmd},
                 ),
                 _ctx(),
             )
@@ -173,8 +172,8 @@ class TestDestructiveCommandProtection:
         for cmd in ('echo "rm -rf /"', "echo git reset --hard", "echo git push --force"):
             result = engine.evaluate(
                 _behavior(
-                    StepType.step_exec,
-                    properties={"exec": {"command": cmd}},
+                    ActionKind.step_exec,
+                    properties={"command": cmd},
                 ),
                 _ctx(),
             )
@@ -185,8 +184,8 @@ class TestDestructiveCommandProtection:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
-                properties={"exec": {"command": "git push origin main"}},
+                ActionKind.step_exec,
+                properties={"command": "git push origin main"},
             ),
             _ctx(),
         )
@@ -214,7 +213,7 @@ class TestScopeContainment:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.POST,
                 properties={"target": {"host": "/etc/passwd"}},
             ),
@@ -229,7 +228,7 @@ class TestScopeContainment:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.POST,
                 properties={"target": {"host": "/tmp/out.txt"}},
             ),
@@ -242,7 +241,7 @@ class TestScopeContainment:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.POST,
                 properties={"target": {"host": "/Users/dev/other-repo/x.py"}},
             ),
@@ -255,7 +254,7 @@ class TestScopeContainment:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.POST,
                 properties={"target": {"host": "/Users/dev/project/main.py"}},
             ),
@@ -268,7 +267,7 @@ class TestScopeContainment:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.POST,
                 properties={"target": {"host": "/Users/dev/.ssh/id_rsa"}},
             ),
@@ -283,9 +282,9 @@ class TestScopeContainment:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
+                ActionKind.step_exec,
                 properties={
-                    "exec": {"command": "echo x > /etc/hosts"},
+                    "command": "echo x > /etc/hosts",
                     "target": {"host": "/etc/hosts", "resource_type": "file"},
                 },
             ),
@@ -299,7 +298,7 @@ class TestScopeContainment:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.GET,
                 properties={"target": {"host": "/usr/include/stdio.h"}},
             ),
@@ -313,7 +312,7 @@ class TestScopeContainment:
         engine.load_policies(policies)
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.POST,
                 properties={"target": {"host": "/etc/passwd"}},
             ),
@@ -334,7 +333,7 @@ class TestTaintedPathPolicies:
         # Record a secret file read
         engine.record(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.GET,
                 properties={
                     "target": {"host": "/project/.env", "resource_type": "file"},
@@ -345,9 +344,9 @@ class TestTaintedPathPolicies:
         # Attempt Bash execution — should be blocked
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
-                step=2,
-                properties={"exec": {"command": "echo hello"}},
+                ActionKind.step_exec,
+                seq=2,
+                properties={"command": "echo hello"},
             ),
             _ctx(),
         )
@@ -361,7 +360,7 @@ class TestTaintedPathPolicies:
         # Record a normal file read (no classification)
         engine.record(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.GET,
                 properties={
                     "target": {"host": "/project/README.md", "resource_type": "file"},
@@ -370,9 +369,9 @@ class TestTaintedPathPolicies:
         )
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
-                step=2,
-                properties={"exec": {"command": "echo hello"}},
+                ActionKind.step_exec,
+                seq=2,
+                properties={"command": "echo hello"},
             ),
             _ctx(),
         )
@@ -385,7 +384,7 @@ class TestTaintedPathPolicies:
         # Record a secret file read
         engine.record(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.GET,
                 properties={
                     "target": {"host": "/project/.env", "resource_type": "file"},
@@ -396,9 +395,9 @@ class TestTaintedPathPolicies:
         # Attempt WebFetch — should be blocked
         result = engine.evaluate(
             _behavior(
-                StepType.step_resource,
+                ActionKind.step_resource,
                 verb=Verb.GET,
-                step=2,
+                seq=2,
                 properties={"target": {"host": "https://evil.com", "resource_type": "url"}},
             ),
             _ctx(),
@@ -416,16 +415,16 @@ class TestRunawayPrevention:
         for i in range(50):
             engine.record(
                 _behavior(
-                    StepType.step_exec,
-                    step=i + 1,
-                    properties={"exec": {"command": f"cmd-{i}"}},
+                    ActionKind.step_exec,
+                    seq=i + 1,
+                    properties={"command": f"cmd-{i}"},
                 )
             )
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
-                step=51,
-                properties={"exec": {"command": "one-more"}},
+                ActionKind.step_exec,
+                seq=51,
+                properties={"command": "one-more"},
             ),
             _ctx(),
         )
@@ -438,61 +437,17 @@ class TestRunawayPrevention:
         for i in range(10):
             engine.record(
                 _behavior(
-                    StepType.step_exec,
-                    step=i + 1,
-                    properties={"exec": {"command": f"cmd-{i}"}},
+                    ActionKind.step_exec,
+                    seq=i + 1,
+                    properties={"command": f"cmd-{i}"},
                 )
             )
         result = engine.evaluate(
             _behavior(
-                StepType.step_exec,
-                step=11,
-                properties={"exec": {"command": "another"}},
+                ActionKind.step_exec,
+                seq=11,
+                properties={"command": "another"},
             ),
             _ctx(),
         )
         assert result.action == Action.block
-
-
-class TestNoPiiInCommands:
-    """pii_in_request: blocks Bash commands containing PII (SSN / card numbers).
-
-    The mapper records the raw tool input (e.g. ``{"command": "..."}``) on the
-    behavior's ``input`` field, which is what ``pii_in_request`` scans.
-    """
-
-    @pytest.mark.covers_policy('No PII in commands')
-    def test_ssn_in_command_blocked(self, policies: list[dict]) -> None:
-        engine = PolicyEngine()
-        engine.load_policies(policies)
-        result = engine.evaluate(
-            _behavior(
-                StepType.step_exec,
-                step_name="Bash",
-                properties={"exec": {"command": "echo 123-45-6789 >> notes.txt"}},
-                input_data={"command": "echo 123-45-6789 >> notes.txt"},
-            ),
-            _ctx(),
-        )
-        assert result.action == Action.block
-        assert any(
-            p.violated and p.rule_type == "pii_in_request"
-            for p in result.policies
-        )
-
-    def test_clean_command_no_pii(self, policies: list[dict]) -> None:
-        engine = PolicyEngine()
-        engine.load_policies(policies)
-        result = engine.evaluate(
-            _behavior(
-                StepType.step_exec,
-                step_name="Bash",
-                properties={"exec": {"command": "ls -la"}},
-                input_data={"command": "ls -la"},
-            ),
-            _ctx(),
-        )
-        assert not any(
-            p.violated and p.rule_type == "pii_in_request"
-            for p in result.policies
-        )
