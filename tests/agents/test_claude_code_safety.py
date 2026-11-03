@@ -195,8 +195,8 @@ class TestDestructiveCommandProtection:
 class TestScopeContainment:
     """path_within_root: allowlist containment — blocks any write outside project_root.
 
-    The "No write outside project" policy is now allowlist containment (#239
-    Layer C): instead of a hardcoded denylist of sensitive directories, it
+    The "No write outside project" policy is now allowlist containment
+    (Layer C): instead of a hardcoded denylist of sensitive directories, it
     blocks any write whose target does not resolve under the session
     project_root. This is strictly stronger — it also covers /tmp and sibling
     repos that the old denylist silently allowed.

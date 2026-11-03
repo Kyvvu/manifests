@@ -2,7 +2,7 @@
 """Match/no-match fixture for the shell write / secret-read stopgap policies.
 
 The ``claude-code-safety.yaml`` manifest gains two ``properties.command`` regex
-policies (#239 Layer A) that close the most common Bash write/secret-read
+policies (Layer A) that close the most common Bash write/secret-read
 vectors directly on the command string:
 
   * ``No shell write to sensitive paths`` — redirect/tee/cp/mv/dd/install into

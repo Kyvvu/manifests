@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pytest entry point for the destructive-delete match/no-match fixture.
 
-The fixture data and matching logic live in ``rm_policies.py`` (the filename
-named in issue #238). pytest's default discovery only collects ``test_*.py``,
+The fixture data and matching logic live in ``rm_policies.py`` (the shared fixture module). pytest's default discovery only collects ``test_*.py``,
 so this thin module re-exports the parametrized tests to make sure the fixture
 is actually executed by ``pytest tests/``. Edit the cases in ``rm_policies.py``.
 """

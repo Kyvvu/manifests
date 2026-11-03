@@ -2,7 +2,7 @@
 """Pytest entry point for the shell write / secret-read stopgap fixture.
 
 The fixture data and matching logic live in ``shell_policies.py`` (mirroring the
-``rm_policies.py`` convention from #238). pytest's default discovery only
+``rm_policies.py`` convention). pytest's default discovery only
 collects ``test_*.py``, so this thin module re-exports the parametrized tests to
 make sure the fixture is actually executed by ``pytest tests/``. Edit the cases
 in ``shell_policies.py``.

@@ -25,13 +25,13 @@ description: |
   Designed for agents registered via kyvvu-claude. Assign via the Kyvvu
   dashboard or API.
 
-version: "1.0.5"
+version: "1.0.7"
 
 policies:
   # ==========================================================================
   # CREDENTIAL EXFILTRATION GUARD
   #
-  # The #1 risk with coding agents: Read(.env) -> Bash(curl ...) leaks
+  # The leading risk with coding agents: Read(.env) -> Bash(curl ...) leaks
   # secrets. Taint is permanent within the task — start a new session to
   # clear.
   # ==========================================================================
@@ -197,7 +197,7 @@ policies:
 
   - name: "No write outside project"
     description: |
-      Allowlist containment (#239 Layer C): block any write whose target path
+      Allowlist containment (Layer C): block any write whose target path
       does not resolve under the session project_root. This is strictly stronger
       than the previous denylist — it covers /tmp, sibling repos, and every other
       out-of-project path, not just a hardcoded list of sensitive directories,
@@ -217,7 +217,9 @@ policies:
       is collapsed but symlinks pointing out of the tree are not resolved. The
       OS read-only mount complements (does not replace) this control.
       Also keep the governed agent away from kyvvu-claude and its local
-      enforcement state, including Claude Code hook settings.
+      enforcement state, including Claude Code hook settings and integration
+      session files. This matches literal commands and paths; shell aliases,
+      variable expansion, and alternate path spellings can evade the regex.
     rule_type: all_of
     params:
       conditions:
@@ -232,18 +234,18 @@ policies:
               rule_type: field_matches_regex
               params:
                 field: properties.command
-                pattern: "(^|[^A-Za-z0-9_-])kyvvu-claude([^A-Za-z0-9_-]|$)|\\.kyvvu-claude/|\\.claude/settings\\.json"
+                pattern: "(^|[^A-Za-z0-9_-])(?:kyvvu-claude(?:-hook)?|kyvvu_claude|kyvvu\\s+claude)([^A-Za-z0-9_-]|$)|\\.kyvvu-claude/|(^|/)\\.kyvvu/integrations/claude-code(/|$)|\\.claude/settings\\.json"
         - rule_type: not
           params:
             condition:
               rule_type: field_matches_regex
               params:
                 field: properties.target.host
-                pattern: "(^|/)\\.kyvvu-claude(/|$)|(^|/)\\.claude/settings\\.json$"
+                pattern: "(^|/)\\.kyvvu-claude(/|$)|(^|/)\\.kyvvu/integrations/claude-code(/|$)|(^|/)\\.claude/settings\\.json$"
     severity: critical
     enforcement_point: step_execution
   # --------------------------------------------------------------------------
-  # SHELL WRITE / SECRET-READ STOPGAPS (#239 Layer A)
+  # SHELL WRITE / SECRET-READ STOPGAPS (Layer A)
   #
   # The containment part of "No write outside project" inspects target.host,
   # which the Write/Edit tools set. These two command regex policies are a
@@ -260,6 +262,8 @@ policies:
   # shell parser cannot resolve runtime indirection, so it is not the fix):
   #   * env indirection / quoting:  T=/etc; echo x > $T/passwd ; cat "$SECRET"
   #   * here-docs / python -c:       python -c "open('/etc/x','w')"
+  #   * self-protection:             aliases, variable expansion, and alternate
+  #                                   path spellings can hide protected state.
   #   * sed -i:                       the write pattern intentionally omits sed -i
   #                                   (Layer B's mapper + Layer C's containment
   #                                   cover writes structurally).

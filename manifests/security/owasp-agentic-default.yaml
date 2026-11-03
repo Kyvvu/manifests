@@ -16,7 +16,7 @@
 # - Immediate value on install: no regex/domain/budget configuration required
 # - Structural over content-based: catches missing gates, runaway loops,
 #   undeclared tools - not environment-specific patterns
-# - Demonstrates path-dependence: policies #7 and #8 read task history,
+# - Demonstrates path-dependence: the gate and sequence policies read task history,
 #   showcasing Kyvvu's core thesis (policies on paths, not on points)
 #
 # OWASP RISKS COVERED:
@@ -49,7 +49,7 @@ description: |
 
   Pair with a compliance template (e.g. EU AI Act) for regulatory coverage.
 
-version: "1.0.2"
+version: "1.0.3"
 
 policies:
   # ==========================================================================

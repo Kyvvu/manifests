@@ -15,7 +15,7 @@ from kyvvu_engine.schemas import ActionKind, Behavior
 ROOT = Path(__file__).resolve().parents[2]
 PUBLIC = ROOT / "kyvvu-manifests-public" / "manifests"
 API = ROOT / "kyvvu-api" / "app" / "library" / "manifests"
-BASELINE = ROOT / "kyvvu-sdk" / "kyvvu" / "baseline"
+BASELINE = ROOT / "kyvvu-baseline" / "kyvvu_baseline"
 
 HUMAN_GATE_POLICIES = {
     "External sends require an exfiltration review gate",

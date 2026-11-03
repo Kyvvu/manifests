@@ -219,7 +219,7 @@ class TestDomainAllowlist:
         )
 
     def test_violating_resource_call_with_no_host(self, policies: list[dict]) -> None:
-        """A resource call that names no destination is blocked (#577)."""
+        """A resource call that names no destination is blocked."""
         engine = PolicyEngine()
         engine.load_policies(policies)
         result = engine.evaluate(
@@ -232,7 +232,7 @@ class TestDomainAllowlist:
         )
 
     def test_compliant_url_form_of_allowlisted_host(self, policies: list[dict]) -> None:
-        """A full URL on an approved host passes the domain allowlist (#577)."""
+        """A full URL on an approved host passes the domain allowlist."""
         engine = PolicyEngine()
         engine.load_policies(policies)
         host = "https://api.example.com/v1"

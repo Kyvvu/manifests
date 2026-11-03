@@ -126,7 +126,7 @@ class TestRegistration:
 
     @pytest.mark.covers_policy('Agent must declare a tool allowlist')
     def test_violating_empty_declared_tools(self, policies: list[dict]) -> None:
-        """An empty declared_tools list declares no tools and violates too (#818)."""
+        """An empty declared_tools list declares no tools and violates too."""
         engine = PolicyEngine()
         engine.load_policies(policies)
         profile = {**self._VALID_PROFILE, "declared_tools": []}
